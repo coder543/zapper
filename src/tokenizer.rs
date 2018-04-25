@@ -91,8 +91,18 @@ impl<'a> Iterator for Tokenizer<'a> {
                 return Some(Ok(ClosingBrace));
             }
 
-            if let Some(operator) =
-                self.source[..end].find(&['|', '*', '+', '-', '/', '(', ')', '"'] as &[char])
+            if let Some(operator) = self.source[..end].find(
+                &[
+                    '|',
+                    '*',
+                    '+',
+                    '-',
+                    '/',
+                    '(',
+                    ')',
+                    '"',
+                ] as &[char],
+            )
             {
                 if operator == 0 {
                     let op = &self.source[0..1];

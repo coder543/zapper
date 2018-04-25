@@ -84,12 +84,14 @@ impl<'a> Expr<'a> {
                 }
                 match next!(tokenizer, UNEXPECTED_EOB) {
                     Token::ClosingBrace => expr,
-                    tok => Err(format!(
+                    tok => {
+                        Err(format!(
                         "Unexpectedly found {:#?} after {:#?}. Remaining tokens: {:#?}",
                         tok,
                         expr,
                         tokenizer.collect::<Vec<_>>(),
-                    ))?,
+                    ))?
+                    }
                 }
             }
             _ => Ok(Expr::Raw("Unexpected token!")),
@@ -118,10 +120,12 @@ impl<'a> Expr<'a> {
     fn filter(expr: Expr<'a>, tokenizer: &mut PeekTokenizer<'a>) -> Result<Expr<'a>, String> {
         let ident = match Expr::parse(tokenizer)? {
             Expr::Identifier(ident) => ident,
-            token => Err(format!(
-                "Illegal token {:?} found while expecting the name of a filter",
-                token
-            ))?,
+            token => {
+                Err(format!(
+                    "Illegal token {:?} found while expecting the name of a filter",
+                    token
+                ))?
+            }
         };
         let args = Expr::get_args(tokenizer)?;
         let expr = Expr::Filter(ident, Box::new(expr), args);
@@ -138,7 +142,8 @@ impl<'a> Expr<'a> {
         let mut args = Vec::new();
         loop {
             match peek!(tokenizer, UNEXPECTED_EOB) {
-                &Token::ClosingBrace | &Token::Op(Operator::Pipe) => return Ok(args),
+                &Token::ClosingBrace |
+                &Token::Op(Operator::Pipe) => return Ok(args),
                 _ => args.push(Literal::parse(tokenizer)?),
             }
         }
@@ -159,8 +164,7 @@ impl<'a> Numeric<'a> {
         match next_and_peek!(tokenizer, "Expected numeric value, found end of input!") {
             (Token::Op(op), _) => Numeric::unary_operator(op, tokenizer),
             (token, Some(&Token::Op(op)))
-                if op != Operator::ClosingParen && op != Operator::Pipe =>
-            {
+                if op != Operator::ClosingParen && op != Operator::Pipe => {
                 Numeric::binary_operator(token, tokenizer)
             }
             (Token::Number(num), _) => Ok(Numeric::Raw(num)),
@@ -183,10 +187,12 @@ impl<'a> Numeric<'a> {
             Token::Op(Operator::Pipe) => {
                 Err("You must close all parentheses before using a filter!")?
             }
-            tok => Err(format!(
-                "A closing parenthesis is missing! Found {:?} instead.",
-                tok
-            ))?,
+            tok => {
+                Err(format!(
+                    "A closing parenthesis is missing! Found {:?} instead.",
+                    tok
+                ))?
+            }
         }
     }
 
@@ -225,15 +231,17 @@ impl<'a> Numeric<'a> {
             Operator::Plus | Operator::Dash | Operator::Asterisk | Operator::Slash => {
                 Ok(if op_val < op.value() {
                     match next {
-                        Numeric::Binary(op2, expr1, expr2) => Numeric::Binary(
-                            op2,
-                            Box::new(Numeric::Binary(
-                                op,
-                                Box::new(Numeric::from_token(tok)?),
-                                expr1,
-                            )),
-                            expr2,
-                        ),
+                        Numeric::Binary(op2, expr1, expr2) => {
+                            Numeric::Binary(
+                                op2,
+                                Box::new(Numeric::Binary(
+                                    op,
+                                    Box::new(Numeric::from_token(tok)?),
+                                    expr1,
+                                )),
+                                expr2,
+                            )
+                        }
                         op => return Err(format!("Illegal operator {:?} found", op)),
                     }
                 } else {
@@ -288,15 +296,15 @@ mod tests {
                     Box::new(Numeric::Binary(
                         Operator::Slash,
                         Box::new(Numeric::Raw(3.0)),
-                        Box::new(Numeric::Raw(4.0))
+                        Box::new(Numeric::Raw(4.0)),
                     )),
                     Box::new(Numeric::Parentheses(Box::new(Numeric::Binary(
                         Operator::Plus,
                         Box::new(Numeric::Raw(2.0)),
-                        Box::new(Numeric::Raw(4.0))
-                    ))))
+                        Box::new(Numeric::Raw(4.0)),
+                    )))),
                 )),
-                Expr::Raw(" and even more!")
+                Expr::Raw(" and even more!"),
             ]
         );
     }
@@ -315,15 +323,15 @@ mod tests {
                     Box::new(Numeric::Binary(
                         Operator::Slash,
                         Box::new(Numeric::Identifier("x")),
-                        Box::new(Numeric::Identifier("height"))
+                        Box::new(Numeric::Identifier("height")),
                     )),
                     Box::new(Numeric::Parentheses(Box::new(Numeric::Binary(
                         Operator::Plus,
                         Box::new(Numeric::Identifier("y")),
-                        Box::new(Numeric::Identifier("n"))
-                    ))))
+                        Box::new(Numeric::Identifier("n")),
+                    )))),
                 )),
-                Expr::Raw(" and even more!")
+                Expr::Raw(" and even more!"),
             ]
         );
     }
@@ -366,11 +374,11 @@ mod tests {
                     Box::new(Expr::Numeric(Numeric::Binary(
                         Operator::Slash,
                         Box::new(Numeric::Identifier("height")),
-                        Box::new(Numeric::Raw(3.0))
+                        Box::new(Numeric::Raw(3.0)),
                     ))),
-                    vec![Literal::Number(2.0)]
+                    vec![Literal::Number(2.0)],
                 ),
-                Expr::Raw(" and even more!")
+                Expr::Raw(" and even more!"),
             ]
         );
     }
@@ -385,7 +393,7 @@ mod tests {
             [
                 Expr::Raw("This is a test "),
                 Expr::Filter("hex", Box::new(Expr::Identifier("height")), vec![]),
-                Expr::Raw(" and even more!")
+                Expr::Raw(" and even more!"),
             ]
         );
     }
@@ -406,13 +414,13 @@ mod tests {
                         Box::new(Expr::Numeric(Numeric::Binary(
                             Operator::Slash,
                             Box::new(Numeric::Identifier("height")),
-                            Box::new(Numeric::Raw(3.0))
+                            Box::new(Numeric::Raw(3.0)),
                         ))),
-                        vec![Literal::Number(2.0)]
+                        vec![Literal::Number(2.0)],
                     )),
-                    vec![]
+                    vec![],
                 ),
-                Expr::Raw(" and even more!")
+                Expr::Raw(" and even more!"),
             ]
         );
     }
@@ -452,7 +460,9 @@ mod tests {
                 Expr::Numeric(Numeric::Negate(Box::new(Numeric::Binary(
                     Operator::Asterisk,
                     Box::new(Numeric::Raw(3.4)),
-                    Box::new(Numeric::Negate(Box::new(Numeric::Identifier("count")))),
+                    Box::new(
+                        Numeric::Negate(Box::new(Numeric::Identifier("count"))),
+                    ),
                 )))),
             ]
         );
