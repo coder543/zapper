@@ -1,28 +1,48 @@
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Token<'a> {
     OpeningBrace,
     ClosingBrace,
-    OpeningParen,
-    ClosingParen,
-    Plus,
-    Dash,
-    Slash,
-    Asterisk,
-    Pipe,
+    Op(Operator),
     Number(f64),
     StringLiteral(&'a str),
     Identifier(&'a str),
     Raw(&'a str),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Operator {
+    Plus,
+    Dash,
+    Slash,
+    Asterisk,
+    OpeningParen,
+    ClosingParen,
+    Pipe,
+}
+
+impl Operator {
+    pub fn value(&self) -> u32 {
+        use self::Operator::*;
+        match *self {
+            Pipe => 0,
+            Plus => 1,
+            Dash => 2,
+            Asterisk => 3,
+            Slash => 4,
+            OpeningParen => 5,
+            ClosingParen => 5,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Tokenizer<'a> {
     source: &'a str,
     in_template: bool,
 }
 
-impl<'b> Tokenizer<'b> {
-    pub fn new<'a>(source: &'a str) -> Tokenizer<'a> {
+impl<'a> Tokenizer<'a> {
+    pub fn new(source: &'a str) -> Tokenizer<'a> {
         Tokenizer {
             source,
             in_template: false,
@@ -35,6 +55,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 
     fn next(&mut self) -> Option<Result<Token<'a>, String>> {
         use self::Token::*;
+        use self::Operator::*;
 
         if self.source.len() == 0 {
             return None;
@@ -77,13 +98,13 @@ impl<'a> Iterator for Tokenizer<'a> {
                     let op = &self.source[0..1];
                     self.source = &self.source[1..];
                     return Some(match op {
-                        "+" => Ok(Plus),
-                        "-" => Ok(Dash),
-                        "/" => Ok(Slash),
-                        "*" => Ok(Asterisk),
-                        "|" => Ok(Pipe),
-                        "(" => Ok(OpeningParen),
-                        ")" => Ok(ClosingParen),
+                        "+" => Ok(Op(Plus)),
+                        "-" => Ok(Op(Dash)),
+                        "/" => Ok(Op(Slash)),
+                        "*" => Ok(Op(Asterisk)),
+                        "|" => Ok(Op(Pipe)),
+                        "(" => Ok(Op(OpeningParen)),
+                        ")" => Ok(Op(ClosingParen)),
                         "\"" => {
                             if let Some(end) = self.source.find('"') {
                                 let quote = &self.source[..end];
@@ -120,23 +141,24 @@ impl<'a> Iterator for Tokenizer<'a> {
 mod tests {
     use super::Tokenizer;
     use super::Token::*;
+    use super::Operator::*;
 
     #[test]
     fn tokens() {
         let source = r#"this is a very {{ adjective | to_upper }} system of extra {{super}}ness.
             {{2+2/1}}
-            {{ concat "various tests " some_var }}
+            {{ some_var | concat "various tests " }}
             {{ -3.4 * -count }}"#;
 
         assert_eq!(
             Tokenizer::new(source)
                 .collect::<Result<Vec<_>, String>>()
                 .unwrap(),
-            [
+            vec![
                 Raw("this is a very "),
                 OpeningBrace,
                 Identifier("adjective"),
-                Pipe,
+                Op(Pipe),
                 Identifier("to_upper"),
                 ClosingBrace,
                 Raw(" system of extra "),
@@ -146,25 +168,26 @@ mod tests {
                 Raw("ness.\n            "),
                 OpeningBrace,
                 Number(2.0),
-                Plus,
+                Op(Plus),
                 Number(2.0),
-                Slash,
+                Op(Slash),
                 Number(1.0),
                 ClosingBrace,
                 Raw("\n            "),
                 OpeningBrace,
+                Identifier("some_var"),
+                Op(Pipe),
                 Identifier("concat"),
                 StringLiteral("various tests "),
-                Identifier("some_var"),
                 ClosingBrace,
                 Raw("\n            "),
                 OpeningBrace,
-                Dash,
+                Op(Dash),
                 Number(3.4),
-                Asterisk,
-                Dash,
+                Op(Asterisk),
+                Op(Dash),
                 Identifier("count"),
-                ClosingBrace
+                ClosingBrace,
             ]
         );
     }
