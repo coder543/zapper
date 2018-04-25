@@ -95,13 +95,10 @@ fn runner<'a>() -> Runner<Person, PersonNums, PersonStrs, PersonFilters> {
 
         filter_id: |_data, _filter, _args, _input_id, _buffer| unreachable!(),
 
-        filter_str: |_data, filter, _args, input, mut buffer| match filter {
-            PersonFilters::ToUpper => {
-                for c in input.as_bytes() {
-                    buffer.push(c.to_ascii_uppercase() as char)
-                }
-                buffer
-            }
+        filter_str: |_data, filter, _args, input, buffer| match filter {
+            PersonFilters::ToUpper => for c in input.as_bytes() {
+                buffer.push(c.to_ascii_uppercase() as char)
+            },
             _ => unreachable!(),
         },
     }
@@ -143,11 +140,8 @@ fn main() {
     let runner = runner();
 
     for person in group {
-        let (buf, stk) = bytecode
-            .run_with(&runner, &person, buffer, stack, &mut stdout_lock)
+        bytecode
+            .run_with(&runner, &person, &mut buffer, &mut stack, &mut stdout_lock)
             .unwrap();
-
-        buffer = buf;
-        stack = stk;
     }
 }

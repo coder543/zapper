@@ -12,9 +12,9 @@ pub struct Runner<Data, NumEnum, StrEnum, FilterEnum> {
     pub str_var: fn(&Data, StrEnum) -> &str,
 
     pub filter_num: fn(&Data, FilterEnum, &[f64], f64) -> f64,
-    // the fourth argument is an optionally reusable buffer to reduce allocation
-    pub filter_id: fn(&Data, FilterEnum, &[f64], StrEnum, String) -> String,
-    pub filter_str: fn(&Data, FilterEnum, &[f64], &str, String) -> String,
+    // the fourth argument is a reusable buffer to reduce allocation
+    pub filter_id: fn(&Data, FilterEnum, &[f64], StrEnum, &mut String),
+    pub filter_str: fn(&Data, FilterEnum, &[f64], &str, &mut String),
 }
 
 #[allow(unused)]
@@ -70,14 +70,14 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         Ok(ret_val)
     }
 
-    pub fn run_with<'a, Data: 'a>(
+    pub fn run_with<Data>(
         &self,
         runner: &Runner<Data, NumEnum, StrEnum, FilterEnum>,
-        data: &'a Data,
-        mut buffer: String,
-        mut stack: Vec<f64>,
+        data: &Data,
+        buffer: &mut String,
+        stack: &mut Vec<f64>,
         output: &mut Write,
-    ) -> Result<(String, Vec<f64>), ::std::io::Error> {
+    ) -> Result<(), ::std::io::Error> {
         for instr in &self.instructions {
             match *instr {
                 Instr::PushImm(val) => stack.push(val),
@@ -117,25 +117,26 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                 )?,
                 Instr::CallId(id, ref args, val_id) => {
                     buffer.clear();
-                    buffer = (runner.filter_id)(data, id, args, val_id, buffer);
+                    (runner.filter_id)(data, id, args, val_id, &mut *buffer);
                     write!(output, "{}", buffer)?
                 }
                 Instr::CallStr(id, ref args, val_id) => {
                     let string = (runner.str_var)(data, val_id);
                     buffer.clear();
-                    buffer = (runner.filter_str)(data, id, args, string, buffer);
+                    (runner.filter_str)(data, id, args, string, buffer);
                     write!(output, "{}", buffer)?
                 }
                 Instr::CallRegStr(id, ref args) => {
+                    //CallRegStr could probably do without this string allocation
                     let string = pop!(stack).to_string();
                     buffer.clear();
-                    buffer = (runner.filter_str)(data, id, args, &string, buffer);
+                    (runner.filter_str)(data, id, args, &string, buffer);
                     write!(output, "{}", buffer)?
                 }
             }
         }
 
-        Ok((buffer, stack))
+        Ok(())
     }
 
     fn extend_with_tree<Data>(
