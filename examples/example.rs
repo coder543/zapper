@@ -2,6 +2,9 @@ extern crate zap;
 
 use zap::{compile, Environment, FilterInput, Runner};
 
+use std::io::stdout;
+
+#[derive(Clone)]
 struct Person {
     id: u64,
     name: String,
@@ -106,7 +109,7 @@ fn runner<'a>() -> Runner<'a, Person, PersonNums, PersonStrs, PersonFilters> {
 
 fn main() {
     let template =
-        "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg";
+        "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
     let env = environment(Provider {
         provider: "apns".to_string(),
         provider_code: 31,
@@ -121,22 +124,29 @@ fn main() {
 
     // println!("bytecode: {:#?}", bytecode);
 
-    let person = Person {
-        id: 12,
-        name: "Bob".to_string(),
-        age: 64,
-        weight: 170.3,
-    };
+    // build up a group of 100 (similar) people
+    let mut group = vec![];
+    for i in 0..100 {
+        group.push(Person {
+            id: 12 + i,
+            name: "Bob".to_string(),
+            age: 49,
+            weight: 170.3 + i as f64,
+        });
+    }
 
-    let mut output = Vec::new();
-    bytecode
-        .run_with(
-            runner(),
-            &person,
-            String::with_capacity(8),
-            Vec::with_capacity(8),
-            &mut output,
-        )
-        .unwrap();
-    println!("{}", String::from_utf8(output).unwrap());
+    // reuse these allocations throughout the output process
+    let mut buffer = String::with_capacity(8);
+    let mut stack = Vec::with_capacity(8);
+    let stdout = stdout();
+    let mut stdout_lock = stdout.lock();
+
+    for person in group {
+        let (buf, stk) = bytecode
+            .run_with(runner(), &person, buffer, stack, &mut stdout_lock)
+            .unwrap();
+
+        buffer = buf;
+        stack = stk;
+    }
 }
