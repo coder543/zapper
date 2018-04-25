@@ -152,6 +152,7 @@ fn bench_zap(c: &mut Criterion) {
                 .run_with(&runner, person, &mut buffer, &mut stack, &mut output)
                 .unwrap();
         }
+        output
     }));
 }
 
@@ -176,8 +177,9 @@ fn bench_hbs(c: &mut Criterion) {
     let mut data = Map::new();
     data.insert("provider".to_string(), to_json(&"apns".to_string()));
     data.insert("provider_code".to_string(), to_json(&"35".to_string()));
-    data.insert("group".to_string(), to_json(&group));
     c.bench_function("hbs", move |b| b.iter(|| {
+        let mut data = data.clone();
+        data.insert("group".to_string(), to_json(&group));
         handlebars.render("table", &data).unwrap()
     }));
 }
