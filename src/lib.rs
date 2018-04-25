@@ -4,8 +4,8 @@ pub mod optimizer;
 pub mod bytecode;
 
 use std::fmt::Debug;
-use bytecode::Bytecode;
 
+pub use bytecode::Bytecode;
 pub use bytecode::Runner;
 
 pub enum FilterInput<StrEnum> {
