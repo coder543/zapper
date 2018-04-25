@@ -28,7 +28,13 @@ pub struct Environment<'a, Data: 'a, NumEnum: 'a, StrEnum: 'a + Debug + PartialE
     pub filter: fn(&str) -> Option<(FilterEnum, usize, FilterInput<StrEnum>)>,
 }
 
-pub fn compile<'a, Data, NumEnum: Debug, StrEnum: Debug + PartialEq, FilterEnum: Debug>(
+pub fn compile<
+    'a,
+    Data,
+    NumEnum: Copy + Debug,
+    StrEnum: Copy + Debug + PartialEq,
+    FilterEnum: Copy + Debug,
+>(
     source: &'a str,
     environment: &'a Environment<'a, Data, NumEnum, StrEnum, FilterEnum>,
 ) -> Result<Bytecode<NumEnum, StrEnum, FilterEnum>, String> {

@@ -7,14 +7,14 @@ use ast::*;
 use super::{Environment, FilterInput};
 
 #[allow(unused)]
-pub struct Runner<'a, Data: 'a, NumEnum, StrEnum, FilterEnum> {
-    pub num_var: fn(&Data, &NumEnum) -> f64,
-    pub str_var: fn(&'a Data, &StrEnum) -> &'a str,
+pub struct Runner<Data, NumEnum, StrEnum, FilterEnum> {
+    pub num_var: fn(&Data, NumEnum) -> f64,
+    pub str_var: fn(&Data, StrEnum) -> &str,
 
-    pub filter_num: fn(&Data, &FilterEnum, &[f64], f64) -> f64,
+    pub filter_num: fn(&Data, FilterEnum, &[f64], f64) -> f64,
     // the fourth argument is an optionally reusable buffer to reduce allocation
-    pub filter_id: fn(&Data, &FilterEnum, &[f64], &StrEnum, String) -> String,
-    pub filter_str: fn(&Data, &FilterEnum, &[f64], &str, String) -> String,
+    pub filter_id: fn(&Data, FilterEnum, &[f64], StrEnum, String) -> String,
+    pub filter_str: fn(&Data, FilterEnum, &[f64], &str, String) -> String,
 }
 
 #[allow(unused)]
@@ -50,7 +50,7 @@ macro_rules! pop {
     };
 }
 
-impl<NumEnum: Debug, StrEnum: Debug + PartialEq, FilterEnum: Debug>
+impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy + Debug>
     Bytecode<NumEnum, StrEnum, FilterEnum>
 {
     #[allow(unused)]
@@ -72,61 +72,61 @@ impl<NumEnum: Debug, StrEnum: Debug + PartialEq, FilterEnum: Debug>
 
     pub fn run_with<'a, Data: 'a>(
         &self,
-        runner: Runner<'a, Data, NumEnum, StrEnum, FilterEnum>,
+        runner: &Runner<Data, NumEnum, StrEnum, FilterEnum>,
         data: &'a Data,
         mut buffer: String,
         mut stack: Vec<f64>,
         output: &mut Write,
     ) -> Result<(String, Vec<f64>), ::std::io::Error> {
         for instr in &self.instructions {
-            match instr {
-                &Instr::PushImm(val) => stack.push(val),
-                &Instr::PushNum(ref id) => stack.push((runner.num_var)(&data, id)),
-                &Instr::PrintReg => write!(output, "{}", pop!(stack))?,
-                &Instr::PrintRaw(start, end) => write!(output, "{}", &self.raw_text[start..end])?,
-                &Instr::PrintStr(ref id) => write!(output, "{}", (runner.str_var)(data, id))?,
-                &Instr::PrintNum(ref id) => write!(output, "{}", (runner.num_var)(data, id))?,
-                &Instr::Add => {
+            match *instr {
+                Instr::PushImm(val) => stack.push(val),
+                Instr::PushNum(id) => stack.push((runner.num_var)(&data, id)),
+                Instr::PrintReg => write!(output, "{}", pop!(stack))?,
+                Instr::PrintRaw(start, end) => write!(output, "{}", &self.raw_text[start..end])?,
+                Instr::PrintStr(id) => write!(output, "{}", (runner.str_var)(data, id))?,
+                Instr::PrintNum(id) => write!(output, "{}", (runner.num_var)(data, id))?,
+                Instr::Add => {
                     let right = pop!(stack);
                     let left = pop!(stack);
                     let result = left + right;
                     stack.push(result)
                 }
-                &Instr::Sub => {
+                Instr::Sub => {
                     let right = pop!(stack);
                     let left = pop!(stack);
                     let result = left - right;
                     stack.push(result)
                 }
-                &Instr::Mul => {
+                Instr::Mul => {
                     let right = pop!(stack);
                     let left = pop!(stack);
                     let result = left * right;
                     stack.push(result)
                 }
-                &Instr::Div => {
+                Instr::Div => {
                     let right = pop!(stack);
                     let left = pop!(stack);
                     let result = left / right;
                     stack.push(result)
                 }
-                &Instr::CallReg(ref id, ref args) => write!(
+                Instr::CallReg(id, ref args) => write!(
                     output,
                     "{}",
                     (runner.filter_num)(data, id, args, pop!(stack))
                 )?,
-                &Instr::CallId(ref id, ref args, ref val_id) => {
+                Instr::CallId(id, ref args, val_id) => {
                     buffer.clear();
                     buffer = (runner.filter_id)(data, id, args, val_id, buffer);
                     write!(output, "{}", buffer)?
                 }
-                &Instr::CallStr(ref id, ref args, ref val_id) => {
+                Instr::CallStr(id, ref args, val_id) => {
                     let string = (runner.str_var)(data, val_id);
                     buffer.clear();
                     buffer = (runner.filter_str)(data, id, args, string, buffer);
                     write!(output, "{}", buffer)?
                 }
-                &Instr::CallRegStr(ref id, ref args) => {
+                Instr::CallRegStr(id, ref args) => {
                     let string = pop!(stack).to_string();
                     buffer.clear();
                     buffer = (runner.filter_str)(data, id, args, &string, buffer);

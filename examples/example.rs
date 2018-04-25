@@ -12,19 +12,19 @@ struct Person {
     weight: f64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum PersonNums {
     Id,
     Age,
     Weight,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum PersonStrs {
     Name,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum PersonFilters {
     Sqrt,
     ToUpper,
@@ -69,7 +69,7 @@ fn environment<'a>(
     }
 }
 
-fn runner<'a>() -> Runner<'a, Person, PersonNums, PersonStrs, PersonFilters> {
+fn runner<'a>() -> Runner<Person, PersonNums, PersonStrs, PersonFilters> {
     Runner {
         num_var: |data, var| match var {
             PersonNums::Id => data.id as f64,
@@ -140,10 +140,11 @@ fn main() {
     let mut stack = Vec::with_capacity(8);
     let stdout = stdout();
     let mut stdout_lock = stdout.lock();
+    let runner = runner();
 
     for person in group {
         let (buf, stk) = bytecode
-            .run_with(runner(), &person, buffer, stack, &mut stdout_lock)
+            .run_with(&runner, &person, buffer, stack, &mut stdout_lock)
             .unwrap();
 
         buffer = buf;
