@@ -2,7 +2,6 @@ pub mod tokenizer;
 pub mod ast;
 pub mod optimizer;
 pub mod bytecode;
-pub mod vm;
 
 use std::fmt::Debug;
 use bytecode::Bytecode;
