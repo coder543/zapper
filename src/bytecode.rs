@@ -13,8 +13,8 @@ pub struct Runner<'a, Data: 'a, NumEnum, StrEnum, FilterEnum> {
 
     pub filter_num: fn(&Data, &FilterEnum, &[f64], f64) -> f64,
     // the fourth argument is an optionally reusable buffer to reduce allocation
-    pub filter_id: fn(&'a Data, &FilterEnum, &[f64], &StrEnum, String) -> String,
-    pub filter_str: fn(&'a Data, &FilterEnum, &[f64], &str, String) -> String,
+    pub filter_id: fn(&Data, &FilterEnum, &[f64], &StrEnum, String) -> String,
+    pub filter_str: fn(&Data, &FilterEnum, &[f64], &str, String) -> String,
 }
 
 #[allow(unused)]
