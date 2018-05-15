@@ -15,6 +15,3 @@ authors = ["Josh Leverette <coder543@gmail.com>"]
 [[bench]]
 name = "benchmark"
 harness = false
-
-[dependencies]
-serde = "1.0.43"

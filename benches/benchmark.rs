@@ -1,5 +1,5 @@
-extern crate zap;
 extern crate handlebars;
+extern crate zap;
 
 #[macro_use]
 extern crate criterion;
@@ -9,8 +9,8 @@ use criterion::Criterion;
 extern crate serde_derive;
 extern crate serde_json;
 
-use zap::{compile, Environment, FilterInput, Runner};
 use handlebars::{to_json, Handlebars};
+use zap::{compile, Environment, FilterInput, Runner};
 
 #[derive(Clone, Serialize)]
 struct Person {
@@ -44,52 +44,64 @@ struct Provider {
     provider_code: u32,
 }
 
-fn environment<'a>(
-    provider: Provider,
-) -> Environment<'a, Provider, PersonNums, PersonStrs, PersonFilters> {
-    Environment {
-        constant_data: provider,
-        num_constant: |data, name| match name {
-            "provider_code" => Some(data.provider_code as f64),
+impl<'a> Environment<'a, PersonNums, PersonStrs, PersonFilters> for Provider {
+    fn num_constant(&self, name: &str) -> Option<f64> {
+        match name {
+            "provider_code" => Some(self.provider_code as f64),
             _ => None,
-        },
-        str_constant: |data, name| match name {
-            "provider" => Some(&data.provider),
+        }
+    }
+
+    fn str_constant(&self, name: &str) -> Option<&str> {
+        match name {
+            "provider" => Some(&self.provider),
             _ => None,
-        },
-        num_var: |name| match name {
+        }
+    }
+
+    fn num_var(name: &str) -> Option<PersonNums> {
+        match name {
             "id" => Some(PersonNums::Id),
             "age" => Some(PersonNums::Age),
             "weight" => Some(PersonNums::Weight),
             _ => None,
-        },
-        str_var: |name| match name {
+        }
+    }
+
+    fn str_var(name: &str) -> Option<PersonStrs> {
+        match name {
             "name" => Some(PersonStrs::Name),
             _ => None,
-        },
+        }
+    }
 
-        filter: |name| match name {
+    fn filter(name: &str) -> Option<(PersonFilters, usize, FilterInput<PersonStrs>)> {
+        match name {
             "sqrt" => Some((PersonFilters::Sqrt, 0, FilterInput::Numeric)),
             "round" => Some((PersonFilters::Round, 1, FilterInput::Numeric)),
             "toupper" => Some((PersonFilters::ToUpper, 0, FilterInput::Stringified)),
             _ => None,
-        },
+        }
     }
 }
 
-fn runner<'a>() -> Runner<Person, PersonNums, PersonStrs, PersonFilters> {
-    Runner {
-        num_var: |data, var| match var {
-            PersonNums::Id => data.id as f64,
-            PersonNums::Age => data.age as f64,
-            PersonNums::Weight => data.weight as f64,
-        },
+impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
+    fn num_var(&self, var: PersonNums) -> f64 {
+        match var {
+            PersonNums::Id => self.id as f64,
+            PersonNums::Age => self.age as f64,
+            PersonNums::Weight => self.weight as f64,
+        }
+    }
 
-        str_var: |data, var| match var {
-            PersonStrs::Name => &data.name,
-        },
+    fn str_var(&self, var: PersonStrs) -> &str {
+        match var {
+            PersonStrs::Name => &self.name,
+        }
+    }
 
-        filter_num: |_data, filter, args, input| match filter {
+    fn filter_num(&self, filter: PersonFilters, args: &[f64], input: f64) -> f64 {
+        match filter {
             PersonFilters::Sqrt => input.sqrt(),
             PersonFilters::Round => {
                 let digits = args[0];
@@ -99,26 +111,35 @@ fn runner<'a>() -> Runner<Person, PersonNums, PersonStrs, PersonFilters> {
                 value / factor
             }
             _ => unreachable!(),
-        },
+        }
+    }
 
-        filter_id: |_data, _filter, _args, _input_id, _buffer| unreachable!(),
+    fn filter_id(
+        &self,
+        _filter: PersonFilters,
+        _args: &[f64],
+        _input_id: PersonStrs,
+        _buffer: &mut String,
+    ) {
+        unreachable!()
+    }
 
-        filter_str: |_data, filter, _args, input, buffer| match filter {
+    fn filter_str(&self, filter: PersonFilters, _args: &[f64], input: &str, buffer: &mut String) {
+        match filter {
             PersonFilters::ToUpper => for c in input.as_bytes() {
                 buffer.push(c.to_ascii_uppercase() as char)
             },
             _ => unreachable!(),
-        },
+        }
     }
 }
 
 fn bench_zap(c: &mut Criterion) {
-    let template =
-        "{{provider}} {{provider_code}} {{id}} {{name}} {{age}} {{weight}}kg\n";
-    let env = environment(Provider {
+    let template = "{{provider}} {{provider_code}} {{id}} {{name}} {{age}} {{weight}}kg\n";
+    let env = Provider {
         provider: "apns".to_string(),
         provider_code: 31,
-    });
+    };
     let bytecode = match compile(template, &env) {
         Ok(bc) => bc,
         Err(err) => {
@@ -143,26 +164,28 @@ fn bench_zap(c: &mut Criterion) {
     // reuse these allocations throughout the output process
     let mut buffer = String::with_capacity(8);
     let mut stack = Vec::with_capacity(8);
-    let runner = runner();
 
-    c.bench_function("zap", move |b| b.iter(|| {
-        let mut output = Vec::new();
-        for person in &group {
-            bytecode
-                .run_with(&runner, person, &mut buffer, &mut stack, &mut output)
-                .unwrap();
-        }
-        output
-    }));
+    c.bench_function("zap", move |b| {
+        b.iter(|| {
+            let mut output = Vec::new();
+            for person in &group {
+                bytecode
+                    .run_with(person, &mut buffer, &mut stack, &mut output)
+                    .unwrap();
+            }
+            output
+        })
+    });
 }
 
 fn bench_hbs(c: &mut Criterion) {
     use serde_json::value::Map;
-    let template =
-        "{{#each group as |p| ~}}{{provider}} {{provider_code}} {{p.id}} {{p.name}} {{p.age}} {{p.weight}}kg\n{{/each~}}";
-    
+    let template = "{{#each group as |p| ~}}{{provider}} {{provider_code}} {{p.id}} {{p.name}} {{p.age}} {{p.weight}}kg\n{{/each~}}";
+
     let mut handlebars = Handlebars::new();
-    handlebars.register_template_string("table", template).unwrap();
+    handlebars
+        .register_template_string("table", template)
+        .unwrap();
 
     let mut group = vec![];
     for i in 0..100 {
@@ -177,11 +200,13 @@ fn bench_hbs(c: &mut Criterion) {
     let mut data = Map::new();
     data.insert("provider".to_string(), to_json(&"apns".to_string()));
     data.insert("provider_code".to_string(), to_json(&"35".to_string()));
-    c.bench_function("hbs", move |b| b.iter(|| {
-        let mut data = data.clone();
-        data.insert("group".to_string(), to_json(&group));
-        handlebars.render("table", &data).unwrap()
-    }));
+    c.bench_function("hbs", move |b| {
+        b.iter(|| {
+            let mut data = data.clone();
+            data.insert("group".to_string(), to_json(&group));
+            handlebars.render("table", &data).unwrap()
+        })
+    });
 }
 
 pub fn benches() {

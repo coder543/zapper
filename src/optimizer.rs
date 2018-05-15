@@ -1,21 +1,33 @@
+use super::Environment;
+use ast::*;
 use std::fmt::Debug;
 use tokenizer::Operator;
-use ast::*;
-use super::Environment;
 
 #[allow(unused)]
-pub fn optimize<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnum>(
+pub fn optimize<
+    'a,
+    NumEnum: 'a,
+    StrEnum: 'a + Debug + PartialEq,
+    FilterEnum: 'a,
+    Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
+>(
     ast: Vec<Expr<'a>>,
-    env: &'a Environment<'a, Data, NumEnum, StrEnum, FilterEnum>,
+    env: &'a Env,
 ) -> Vec<Expr<'a>> {
     ast.into_iter()
         .map(|tree| optimize_tree(tree, env, 20))
         .collect()
 }
 
-pub fn optimize_tree<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnum>(
+pub fn optimize_tree<
+    'a,
+    NumEnum: 'a,
+    StrEnum: 'a + Debug + PartialEq,
+    FilterEnum: 'a,
+    Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
+>(
     tree: Expr<'a>,
-    env: &'a Environment<'a, Data, NumEnum, StrEnum, FilterEnum>,
+    env: &'a Env,
     effort: u32,
 ) -> Expr<'a> {
     if effort == 0 {
@@ -24,9 +36,9 @@ pub fn optimize_tree<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnum>(
     let effort = effort - 1;
     match tree {
         Expr::Identifier(id) => {
-            if let Some(val) = (env.num_constant)(&env.constant_data, id) {
+            if let Some(val) = env.num_constant(id) {
                 Expr::Numeric(Numeric::Raw(val))
-            } else if let Some(val) = (env.str_constant)(&env.constant_data, id) {
+            } else if let Some(val) = env.str_constant(id) {
                 Expr::StringLiteral(val)
             } else {
                 Expr::Identifier(id)
@@ -41,9 +53,15 @@ pub fn optimize_tree<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnum>(
     }
 }
 
-pub fn optimize_numeric<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnum>(
+pub fn optimize_numeric<
+    'a,
+    NumEnum: 'a,
+    StrEnum: 'a + Debug + PartialEq,
+    FilterEnum: 'a,
+    Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
+>(
     numeric: Numeric<'a>,
-    env: &'a Environment<'a, Data, NumEnum, StrEnum, FilterEnum>,
+    env: &'a Env,
     effort: u32,
 ) -> Numeric<'a> {
     if effort == 0 {
@@ -52,7 +70,7 @@ pub fn optimize_numeric<'a, Data, NumEnum, StrEnum: Debug + PartialEq, FilterEnu
     let effort = effort - 1;
     match numeric {
         Numeric::Identifier(id) => {
-            if let Some(val) = (env.num_constant)(&env.constant_data, id) {
+            if let Some(val) = env.num_constant(id) {
                 Numeric::Raw(val)
             } else {
                 Numeric::Identifier(id)

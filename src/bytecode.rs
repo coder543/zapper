@@ -1,21 +1,10 @@
 // during compilation, concatenate all string literals into a single "resource" string, and replace the literals with indices into the resource string.
 
-use std::io::Write;
-use std::fmt::Debug;
-use tokenizer::Operator;
+use super::{Environment, FilterInput, Runner};
 use ast::*;
-use super::{Environment, FilterInput};
-
-#[allow(unused)]
-pub struct Runner<Data, NumEnum, StrEnum, FilterEnum> {
-    pub num_var: fn(&Data, NumEnum) -> f64,
-    pub str_var: fn(&Data, StrEnum) -> &str,
-
-    pub filter_num: fn(&Data, FilterEnum, &[f64], f64) -> f64,
-    // the fourth argument is a reusable buffer to reduce allocation
-    pub filter_id: fn(&Data, FilterEnum, &[f64], StrEnum, &mut String),
-    pub filter_str: fn(&Data, FilterEnum, &[f64], &str, &mut String),
-}
+use std::fmt::Debug;
+use std::io::Write;
+use tokenizer::Operator;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -45,18 +34,22 @@ pub struct Bytecode<NumEnum, StrEnum, FilterEnum> {
 }
 
 macro_rules! pop {
-    ($stack: ident) => {
+    ($stack:ident) => {
         $stack.pop().unwrap_or_else(|| panic!("stack underflow!"))
     };
 }
 
-impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy + Debug>
-    Bytecode<NumEnum, StrEnum, FilterEnum>
+impl<
+        'a,
+        NumEnum: 'a + Copy + Debug,
+        StrEnum: 'a + Copy + Debug + PartialEq,
+        FilterEnum: 'a + Copy + Debug,
+    > Bytecode<NumEnum, StrEnum, FilterEnum>
 {
     #[allow(unused)]
-    pub fn from_ast<Data>(
+    pub fn from_ast<Env: Environment<'a, NumEnum, StrEnum, FilterEnum>>(
         ast: Vec<Expr>,
-        env: &Environment<Data, NumEnum, StrEnum, FilterEnum>,
+        env: &Env,
     ) -> Result<Bytecode<NumEnum, StrEnum, FilterEnum>, String> {
         let mut ret_val = Bytecode {
             raw_text: String::new(),
@@ -70,10 +63,9 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         Ok(ret_val)
     }
 
-    pub fn run_with<Data>(
+    pub fn run_with(
         &self,
-        runner: &Runner<Data, NumEnum, StrEnum, FilterEnum>,
-        data: &Data,
+        runner: &Runner<NumEnum, StrEnum, FilterEnum>,
         buffer: &mut String,
         stack: &mut Vec<f64>,
         output: &mut Write,
@@ -81,11 +73,11 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         for instr in &self.instructions {
             match *instr {
                 Instr::PushImm(val) => stack.push(val),
-                Instr::PushNum(id) => stack.push((runner.num_var)(&data, id)),
+                Instr::PushNum(id) => stack.push(runner.num_var(id)),
                 Instr::PrintReg => write!(output, "{}", pop!(stack))?,
                 Instr::PrintRaw(start, end) => write!(output, "{}", &self.raw_text[start..end])?,
-                Instr::PrintStr(id) => write!(output, "{}", (runner.str_var)(data, id))?,
-                Instr::PrintNum(id) => write!(output, "{}", (runner.num_var)(data, id))?,
+                Instr::PrintStr(id) => write!(output, "{}", runner.str_var(id))?,
+                Instr::PrintNum(id) => write!(output, "{}", runner.num_var(id))?,
                 Instr::Add => {
                     let right = pop!(stack);
                     let left = pop!(stack);
@@ -110,27 +102,25 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                     let result = left / right;
                     stack.push(result)
                 }
-                Instr::CallReg(id, ref args) => write!(
-                    output,
-                    "{}",
-                    (runner.filter_num)(data, id, args, pop!(stack))
-                )?,
+                Instr::CallReg(id, ref args) => {
+                    write!(output, "{}", runner.filter_num(id, args, pop!(stack)))?
+                }
                 Instr::CallId(id, ref args, val_id) => {
                     buffer.clear();
-                    (runner.filter_id)(data, id, args, val_id, &mut *buffer);
+                    runner.filter_id(id, args, val_id, &mut *buffer);
                     write!(output, "{}", buffer)?
                 }
                 Instr::CallStr(id, ref args, val_id) => {
-                    let string = (runner.str_var)(data, val_id);
+                    let string = runner.str_var(val_id);
                     buffer.clear();
-                    (runner.filter_str)(data, id, args, string, buffer);
+                    runner.filter_str(id, args, string, buffer);
                     write!(output, "{}", buffer)?
                 }
                 Instr::CallRegStr(id, ref args) => {
                     //CallRegStr could probably do without this string allocation
                     let string = pop!(stack).to_string();
                     buffer.clear();
-                    (runner.filter_str)(data, id, args, &string, buffer);
+                    runner.filter_str(id, args, &string, buffer);
                     write!(output, "{}", buffer)?
                 }
             }
@@ -139,10 +129,10 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         Ok(())
     }
 
-    fn extend_with_tree<Data>(
+    fn extend_with_tree<Env: Environment<'a, NumEnum, StrEnum, FilterEnum>>(
         &mut self,
         tree: Expr,
-        env: &Environment<Data, NumEnum, StrEnum, FilterEnum>,
+        env: &Env,
     ) -> Result<(), String> {
         match tree {
             Expr::Raw(string) | Expr::StringLiteral(string) => {
@@ -152,9 +142,9 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                 self.instructions.push(Instr::PrintRaw(start, end));
             }
             Expr::Identifier(id) => {
-                if let Some(val) = (env.num_var)(id) {
+                if let Some(val) = Env::num_var(id) {
                     self.instructions.push(Instr::PrintNum(val));
-                } else if let Some(val) = (env.str_var)(id) {
+                } else if let Some(val) = Env::str_var(id) {
                     self.instructions.push(Instr::PrintStr(val));
                 } else {
                     return Err(format!("Unknown identifier {:?}", id));
@@ -170,19 +160,19 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         Ok(())
     }
 
-    fn extend_with_numeric<Data>(
+    fn extend_with_numeric<Env: Environment<'a, NumEnum, StrEnum, FilterEnum>>(
         &mut self,
         numeric: Numeric,
-        env: &Environment<Data, NumEnum, StrEnum, FilterEnum>,
+        env: &Env,
     ) -> Result<(), String> {
         match numeric {
             Numeric::Raw(val) => {
                 self.instructions.push(Instr::PushImm(val));
             }
             Numeric::Identifier(id) => {
-                if let Some(val) = (env.num_var)(id) {
+                if let Some(val) = Env::num_var(id) {
                     self.instructions.push(Instr::PushNum(val));
-                } else if let Some(_) = (env.str_var)(id) {
+                } else if let Some(_) = Env::str_var(id) {
                     return Err(format!("{:?} is a string, numeric value was expected!", id));
                 } else {
                     return Err(format!("Unknown identifier {:?}", id));
@@ -210,14 +200,14 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
         Ok(())
     }
 
-    fn extend_with_filter<Data>(
+    fn extend_with_filter<Env: Environment<'a, NumEnum, StrEnum, FilterEnum>>(
         &mut self,
         id: &str,
         expr: Expr,
         args: Vec<Literal>,
-        env: &Environment<Data, NumEnum, StrEnum, FilterEnum>,
+        env: &Env,
     ) -> Result<(), String> {
-        if let Some((val, arg_count, input_type)) = (env.filter)(id) {
+        if let Some((val, arg_count, input_type)) = Env::filter(id) {
             if arg_count != args.len() {
                 return Err(format!(
                     "filter {} expected {} args, but {} were provided",
@@ -246,7 +236,7 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                     self.instructions.push(Instr::CallRegStr(val, args?));
                 }
                 (FilterInput::Numeric, Expr::Identifier(val_id)) => {
-                    if let Some(val_id) = (env.num_var)(val_id) {
+                    if let Some(val_id) = Env::num_var(val_id) {
                         self.instructions.push(Instr::PushNum(val_id));
                         self.instructions.push(Instr::CallReg(val, args?));
                     } else {
@@ -265,7 +255,7 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                     ));
                 }
                 (FilterInput::StrEnumId(valid_ids), Expr::Identifier(val_id)) => {
-                    match (env.str_var)(val_id) {
+                    match Env::str_var(val_id) {
                         None => {
                             return Err(format!(
                                 "filter {} expected one of these identifiers: {:#?}.\nUnknown identifier found: {:#?}",
@@ -289,9 +279,9 @@ impl<NumEnum: Copy + Debug, StrEnum: Copy + Debug + PartialEq, FilterEnum: Copy 
                     }
                 }
                 (FilterInput::Stringified, Expr::Identifier(val_id)) => {
-                    if let Some(val_id) = (env.str_var)(val_id) {
+                    if let Some(val_id) = Env::str_var(val_id) {
                         self.instructions.push(Instr::CallStr(val, args?, val_id));
-                    } else if let Some(val_id) = (env.num_var)(val_id) {
+                    } else if let Some(val_id) = Env::num_var(val_id) {
                         self.instructions.push(Instr::PushNum(val_id));
                         self.instructions.push(Instr::CallRegStr(val, args?));
                     } else {
