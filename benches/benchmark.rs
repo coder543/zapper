@@ -126,9 +126,11 @@ impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
 
     fn filter_str(&self, filter: PersonFilters, _args: &[f64], input: &str, buffer: &mut String) {
         match filter {
-            PersonFilters::ToUpper => for c in input.as_bytes() {
-                buffer.push(c.to_ascii_uppercase() as char)
-            },
+            PersonFilters::ToUpper => {
+                for c in input.as_bytes() {
+                    buffer.push(c.to_ascii_uppercase() as char)
+                }
+            }
             _ => unreachable!(),
         }
     }

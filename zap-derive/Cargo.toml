@@ -1,0 +1,11 @@
+[package]
+authors = ["Josh Leverette <coder543@gmail.com>"]
+name = "zap_derive"
+version = "0.1.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "0.5.2"
+syn = { version = "0.13.10", features = ["extra-traits"] }

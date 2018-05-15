@@ -2,6 +2,7 @@
 
 use super::{Environment, FilterInput, Runner};
 use ast::*;
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::Write;
 use tokenizer::Operator;
@@ -120,7 +121,7 @@ impl<
                     //CallRegStr could probably do without this string allocation
                     let string = pop!(stack).to_string();
                     buffer.clear();
-                    runner.filter_str(id, args, &string, buffer);
+                    runner.filter_str(id, args, Cow::from(string), buffer);
                     write!(output, "{}", buffer)?
                 }
             }

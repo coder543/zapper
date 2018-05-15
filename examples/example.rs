@@ -2,6 +2,7 @@ extern crate zap;
 
 use zap::{compile, Environment, FilterInput, Runner};
 
+use std::borrow::Cow;
 use std::io::stdout;
 
 #[derive(Clone)]
@@ -86,9 +87,9 @@ impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
         }
     }
 
-    fn str_var(&self, var: PersonStrs) -> &str {
+    fn str_var(&self, var: PersonStrs) -> Cow<str> {
         match var {
-            PersonStrs::Name => &self.name,
+            PersonStrs::Name => self.name.as_str().into(),
         }
     }
 
@@ -116,19 +117,26 @@ impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
         unreachable!()
     }
 
-    fn filter_str(&self, filter: PersonFilters, _args: &[f64], input: &str, buffer: &mut String) {
+    fn filter_str(
+        &self,
+        filter: PersonFilters,
+        _args: &[f64],
+        input: Cow<str>,
+        buffer: &mut String,
+    ) {
         match filter {
-            PersonFilters::ToUpper => for c in input.as_bytes() {
-                buffer.push(c.to_ascii_uppercase() as char)
-            },
+            PersonFilters::ToUpper => {
+                for c in input.as_bytes() {
+                    buffer.push(c.to_ascii_uppercase() as char)
+                }
+            }
             _ => unreachable!(),
         }
     }
 }
 
 fn main() {
-    let template =
-        "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
+    let template = "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
 
     let env = Provider {
         provider: "apns".to_string(),
