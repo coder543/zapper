@@ -9,7 +9,7 @@ use syn::{Data, Fields, Ident, Type};
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(ZapEnv, attributes(runner, filter))]
+#[proc_macro_derive(ZapEnv, attributes(runner))]
 pub fn zap_env_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
@@ -81,7 +81,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
         .iter()
         .map(|f| {
             let fs = f.to_string();
-            quote! { #fs => Some(&self.#f), }
+            quote! { #fs => ::std::borrow::Cow::from(&*self.#f).into(), }
         })
         .collect::<Vec<_>>();
 
@@ -95,7 +95,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
                 }
             }
 
-            fn str_constant(&self, name: &str) -> Option<&str> {
+            fn str_constant(&self, name: &str) -> Option<::std::borrow::Cow<str>> {
                 match name {
                     #(#str_match)*
                     _ => None
@@ -111,18 +111,13 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
             }
 
             fn filter(name: &str) -> Option<(#filter_enum, usize, FilterInput<#str_enum>)> {
-                match name {
-                    // "sqrt" => Some((PersonFilters::Sqrt, 0, FilterInput::Numeric)),
-                    // "round" => Some((PersonFilters::Round, 1, FilterInput::Numeric)),
-                    // "toupper" => Some((PersonFilters::ToUpper, 0, FilterInput::Stringified)),
-                    _ => None,
-                }
+                #filter_enum::from_str(name)
             }
         }
     }
 }
 
-#[proc_macro_derive(ZapRunner, attributes(runner, filter))]
+#[proc_macro_derive(ZapRunner, attributes(filter))]
 pub fn zap_runner_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
@@ -189,10 +184,18 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
     let num_enum = Ident::new(&(name.to_string() + "Nums"), name.span());
     let str_enum = Ident::new(&(name.to_string() + "Strs"), name.span());
     let filter_enum = Ident::new(&(name.to_string() + "Filters"), name.span());
+    let filter_fields = filters.iter().map(|f| {
+        Ident::new(
+            &f[..f
+                   .find('/')
+                   .expect("filters must specify number of args and return type.")],
+            name.span(),
+        )
+    });
 
     let num_match = num_fields
         .iter()
-        .map(|f| quote! { #f => self.#f as f64, })
+        .map(|f| quote! { #num_enum::#f => self.#f as f64, })
         .collect::<Vec<_>>();
 
     let num_from = num_fields
@@ -205,7 +208,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
 
     let str_match = str_fields
         .iter()
-        .map(|f| quote! { #f => ::std::borrow::Cow::from(&*self.#f).into(), })
+        .map(|f| quote! { #str_enum::#f => ::std::borrow::Cow::from(&*self.#f).into(), })
         .collect::<Vec<_>>();
 
     let str_from = str_fields
@@ -213,6 +216,40 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         .map(|f| {
             let fs = f.to_string();
             quote! { #fs => Some(#str_enum::#f), }
+        })
+        .collect::<Vec<_>>();
+
+    let mut num_filters = vec![];
+    let mut str_filters = vec![];
+    let mut custom_filters = vec![];
+
+    let filter_from = filters
+        .iter()
+        .map(|f| {
+            let split = f
+                .find('/')
+                .expect("filters must specify number of args and return type.");
+            let filter = &f[..split];
+            let filter_i = Ident::new(&filter, name.span());
+            let arg_count = f[split + 1..f.len() - 1]
+                .parse::<usize>()
+                .expect("argument count for filter must be a usize");
+            let filter_type = f.as_bytes()[f.len() - 1] as char;
+            match filter_type {
+            'n' => {
+                num_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input), });
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::Numeric)), )
+            }
+            's' => {
+                str_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, &input, buffer), });                
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::Stringified)), )
+            }
+            'x' => {
+                custom_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input_id, buffer), });                                
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::StrEnumId(vec![]))), )
+            }
+            _ => panic!("no such input type as {}, valid options are n (numeric), s (stringified), x (custom)", filter_type)
+        }
         })
         .collect::<Vec<_>>();
 
@@ -251,40 +288,58 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
 
         #[allow(bad_style)]
         #[derive(Copy, Clone, Debug, PartialEq)]
-        enum #filter_enum {}
+        enum #filter_enum {
+            #(#filter_fields,)*
+        }
+
+        impl #filter_enum {
+            fn from_str(name: &str) -> Option<(#filter_enum, usize, FilterInput<#str_enum>)> {
+                match name {
+                    #(#filter_from)*
+                    _ => None
+                }
+            }
+        }
 
         #[allow(bad_style, unused)]
         impl Runner<#num_enum, #str_enum, #filter_enum> for #name {
             fn num_var(&self, var: #num_enum) -> f64 {
-                use #num_enum::*;
                 match var {
                    #(#num_match)*
                 }
             }
 
             fn str_var(&self, var: #str_enum) -> ::std::borrow::Cow<str> {
-                use #str_enum::*;
                 match var {
                     #(#str_match)*
                 }
             }
 
             fn filter_num(&self, filter: #filter_enum, args: &[f64], input: f64) -> f64 {
-                unreachable!()
+                match filter {
+                    #(#num_filters)*
+                    _ => unreachable!("bug in zap! attempted to execute {:?} as a numeric filter erroneously", filter)
+                }
+            }
+
+            fn filter_str(&self, filter: #filter_enum, args: &[f64], input: ::std::borrow::Cow<str>, buffer: &mut String) {
+                match filter {
+                    #(#str_filters)*
+                    _ => unreachable!("bug in zap! attempted to execute {:?} as a string filter erroneously", filter)
+                }
             }
 
             fn filter_id(
                 &self,
-                _filter: #filter_enum,
-                _args: &[f64],
-                _input_id: #str_enum,
-                _buffer: &mut String,
+                filter: #filter_enum,
+                args: &[f64],
+                input_id: #str_enum,
+                buffer: &mut String,
             ) {
-                unreachable!()
-            }
-
-            fn filter_str(&self, filter: #filter_enum, _args: &[f64], input: ::std::borrow::Cow<str>, buffer: &mut String) {
-                unreachable!()
+                match filter {
+                    #(#custom_filters)*
+                    _ => unreachable!("bug in zap! attempted to execute {:?} as a custom filter erroneously", filter)
+                }
             }
         }
     }

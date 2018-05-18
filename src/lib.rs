@@ -16,7 +16,7 @@ pub enum FilterInput<StrEnum> {
 
 pub trait Environment<'a, NumEnum: 'a, StrEnum: 'a + Debug + PartialEq, FilterEnum: 'a> {
     fn num_constant(&self, &str) -> Option<f64>;
-    fn str_constant(&'a self, &str) -> Option<&'a str>;
+    fn str_constant(&'a self, &str) -> Option<Cow<'a, str>>;
 
     fn num_var(&str) -> Option<NumEnum>;
     fn str_var(&str) -> Option<StrEnum>;

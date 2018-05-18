@@ -54,8 +54,8 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = Result<Token<'a>, String>;
 
     fn next(&mut self) -> Option<Result<Token<'a>, String>> {
-        use self::Token::*;
         use self::Operator::*;
+        use self::Token::*;
 
         if self.source.len() == 0 {
             return None;
@@ -91,18 +91,8 @@ impl<'a> Iterator for Tokenizer<'a> {
                 return Some(Ok(ClosingBrace));
             }
 
-            if let Some(operator) = self.source[..end].find(
-                &[
-                    '|',
-                    '*',
-                    '+',
-                    '-',
-                    '/',
-                    '(',
-                    ')',
-                    '"',
-                ] as &[char],
-            )
+            if let Some(operator) =
+                self.source[..end].find(&['|', '*', '+', '-', '/', '(', ')', '"'] as &[char])
             {
                 if operator == 0 {
                     let op = &self.source[0..1];
@@ -149,9 +139,9 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::Tokenizer;
-    use super::Token::*;
     use super::Operator::*;
+    use super::Token::*;
+    use super::Tokenizer;
 
     #[test]
     fn tokens() {

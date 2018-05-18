@@ -136,10 +136,16 @@ impl<
         env: &Env,
     ) -> Result<(), String> {
         match tree {
-            Expr::Raw(string) | Expr::StringLiteral(string) => {
+            Expr::Raw(string) => {
                 let start = self.raw_text.len();
                 let end = start + string.len();
                 self.raw_text.push_str(string);
+                self.instructions.push(Instr::PrintRaw(start, end));
+            }
+            Expr::StringLiteral(string) => {
+                let start = self.raw_text.len();
+                let end = start + string.len();
+                self.raw_text.push_str(&string);
                 self.instructions.push(Instr::PrintRaw(start, end));
             }
             Expr::Identifier(id) => {
@@ -218,7 +224,8 @@ impl<
                 ));
             }
 
-            let args: Result<Vec<f64>, String> = args.into_iter()
+            let args: Result<Vec<f64>, String> = args
+                .into_iter()
                 .map(|x| match x {
                     Literal::Number(val) => Ok(val),
                     Literal::StringLiteral(_) => {
@@ -316,6 +323,8 @@ impl<
                     unreachable!();
                 }
             }
+        } else {
+            return Err(format!("Unknown filter named {}", id));
         }
 
         Ok(())

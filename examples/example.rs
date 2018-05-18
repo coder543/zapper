@@ -45,9 +45,9 @@ impl<'a> Environment<'a, PersonNums, PersonStrs, PersonFilters> for Provider {
         }
     }
 
-    fn str_constant(&self, name: &str) -> Option<&str> {
+    fn str_constant(&self, name: &str) -> Option<Cow<str>> {
         match name {
-            "provider" => Some(&self.provider),
+            "provider" => Some(Cow::from(&*self.provider)),
             _ => None,
         }
     }

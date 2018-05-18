@@ -8,6 +8,9 @@ use zap::{compile, Environment, FilterInput, Runner};
 use std::io::stdout;
 
 #[derive(Clone, ZapRunner)]
+#[filter = "sqrt/0n"]
+#[filter = "round/1n"]
+#[filter = "toupper/0s"]
 struct Person {
     id: u64,
     name: String,
@@ -17,9 +20,6 @@ struct Person {
 
 #[derive(ZapEnv)]
 #[runner = "Person"]
-#[filter = "sqrt/0i"]
-#[filter = "round/1i"]
-#[filter = "toupper/0s"]
 struct Provider {
     provider: String,
     provider_code: u32,
@@ -36,7 +36,7 @@ fn round(_data: &Person, args: &[f64], input: f64) -> f64 {
     value / factor
 }
 
-fn to_upper(_data: &Person, _args: &[f64], input: &str, buffer: &mut String) {
+fn toupper(_data: &Person, _args: &[f64], input: &str, buffer: &mut String) {
     for c in input.as_bytes() {
         buffer.push(c.to_ascii_uppercase() as char)
     }

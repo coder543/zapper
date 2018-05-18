@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::iter::Peekable;
 use tokenizer::{Operator, Token, Tokenizer};
 
@@ -7,7 +8,7 @@ pub type Ident<'a> = &'a str;
 pub enum Expr<'a> {
     Raw(&'a str),
     Filter(Ident<'a>, Box<Expr<'a>>, Vec<Literal<'a>>),
-    StringLiteral(&'a str),
+    StringLiteral(Cow<'a, str>),
     Identifier(Ident<'a>),
     Numeric(Numeric<'a>),
 }
@@ -24,7 +25,7 @@ pub enum Numeric<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal<'a> {
     Number(f64),
-    StringLiteral(&'a str),
+    StringLiteral(Cow<'a, str>),
 }
 
 type PeekTokenizer<'a> = Peekable<Tokenizer<'a>>;
@@ -42,24 +43,24 @@ pub fn parse<'a>(tokenizer: Tokenizer<'a>) -> Result<Vec<Expr<'a>>, String> {
 }
 
 macro_rules! next {
-    ($tokenizer: ident) => {
+    ($tokenizer:ident) => {
         $tokenizer
             .next()
             .ok_or_else(|| String::from("Unexpected end of input!"))??
     };
-    ($tokenizer: ident, $err: tt) => {
+    ($tokenizer:ident, $err:tt) => {
         $tokenizer.next().ok_or_else(|| String::from($err))??
     };
 }
 
 macro_rules! peek {
-    ($tokenizer: ident) => {
+    ($tokenizer:ident) => {
         match $tokenizer.peek() {
             Some(&Err(_)) | None => None,
             Some(&Ok(ref val)) => Some(val),
         }
     };
-    ($tokenizer: ident, $err: tt) => {
+    ($tokenizer:ident, $err:tt) => {
         match $tokenizer.peek().ok_or_else(|| String::from($err))? {
             &Err(_) => Err(String::from($err))?,
             &Ok(ref val) => val,
@@ -68,7 +69,7 @@ macro_rules! peek {
 }
 
 macro_rules! next_and_peek {
-    ($tokenizer: ident, $err: tt) => {
+    ($tokenizer:ident, $err:tt) => {
         (next!($tokenizer, $err), peek!($tokenizer))
     };
 }
@@ -84,14 +85,12 @@ impl<'a> Expr<'a> {
                 }
                 match next!(tokenizer, UNEXPECTED_EOB) {
                     Token::ClosingBrace => expr,
-                    tok => {
-                        Err(format!(
+                    tok => Err(format!(
                         "Unexpectedly found {:#?} after {:#?}. Remaining tokens: {:#?}",
                         tok,
                         expr,
                         tokenizer.collect::<Vec<_>>(),
-                    ))?
-                    }
+                    ))?,
                 }
             }
             _ => Ok(Expr::Raw("Unexpected token!")),
@@ -120,12 +119,10 @@ impl<'a> Expr<'a> {
     fn filter(expr: Expr<'a>, tokenizer: &mut PeekTokenizer<'a>) -> Result<Expr<'a>, String> {
         let ident = match Expr::parse(tokenizer)? {
             Expr::Identifier(ident) => ident,
-            token => {
-                Err(format!(
-                    "Illegal token {:?} found while expecting the name of a filter",
-                    token
-                ))?
-            }
+            token => Err(format!(
+                "Illegal token {:?} found while expecting the name of a filter",
+                token
+            ))?,
         };
         let args = Expr::get_args(tokenizer)?;
         let expr = Expr::Filter(ident, Box::new(expr), args);
@@ -142,8 +139,7 @@ impl<'a> Expr<'a> {
         let mut args = Vec::new();
         loop {
             match peek!(tokenizer, UNEXPECTED_EOB) {
-                &Token::ClosingBrace |
-                &Token::Op(Operator::Pipe) => return Ok(args),
+                &Token::ClosingBrace | &Token::Op(Operator::Pipe) => return Ok(args),
                 _ => args.push(Literal::parse(tokenizer)?),
             }
         }
@@ -153,7 +149,7 @@ impl<'a> Expr<'a> {
         match token {
             Token::Identifier(ident) => Ok(Expr::Identifier(ident)),
             Token::Number(num) => Ok(Expr::Numeric(Numeric::Raw(num))),
-            Token::StringLiteral(string) => Ok(Expr::StringLiteral(string)),
+            Token::StringLiteral(string) => Ok(Expr::StringLiteral(string.into())),
             token => Err(format!("Invalid token: {:?}", token)),
         }
     }
@@ -164,7 +160,8 @@ impl<'a> Numeric<'a> {
         match next_and_peek!(tokenizer, "Expected numeric value, found end of input!") {
             (Token::Op(op), _) => Numeric::unary_operator(op, tokenizer),
             (token, Some(&Token::Op(op)))
-                if op != Operator::ClosingParen && op != Operator::Pipe => {
+                if op != Operator::ClosingParen && op != Operator::Pipe =>
+            {
                 Numeric::binary_operator(token, tokenizer)
             }
             (Token::Number(num), _) => Ok(Numeric::Raw(num)),
@@ -187,12 +184,10 @@ impl<'a> Numeric<'a> {
             Token::Op(Operator::Pipe) => {
                 Err("You must close all parentheses before using a filter!")?
             }
-            tok => {
-                Err(format!(
-                    "A closing parenthesis is missing! Found {:?} instead.",
-                    tok
-                ))?
-            }
+            tok => Err(format!(
+                "A closing parenthesis is missing! Found {:?} instead.",
+                tok
+            ))?,
         }
     }
 
@@ -231,17 +226,15 @@ impl<'a> Numeric<'a> {
             Operator::Plus | Operator::Dash | Operator::Asterisk | Operator::Slash => {
                 Ok(if op_val < op.value() {
                     match next {
-                        Numeric::Binary(op2, expr1, expr2) => {
-                            Numeric::Binary(
-                                op2,
-                                Box::new(Numeric::Binary(
-                                    op,
-                                    Box::new(Numeric::from_token(tok)?),
-                                    expr1,
-                                )),
-                                expr2,
-                            )
-                        }
+                        Numeric::Binary(op2, expr1, expr2) => Numeric::Binary(
+                            op2,
+                            Box::new(Numeric::Binary(
+                                op,
+                                Box::new(Numeric::from_token(tok)?),
+                                expr1,
+                            )),
+                            expr2,
+                        ),
                         op => return Err(format!("Illegal operator {:?} found", op)),
                     }
                 } else {
@@ -268,7 +261,7 @@ impl<'a> Numeric<'a> {
 impl<'a> Literal<'a> {
     fn parse(tokenizer: &mut PeekTokenizer<'a>) -> Result<Literal<'a>, String> {
         match next!(tokenizer) {
-            Token::StringLiteral(string) => Ok(Literal::StringLiteral(string)),
+            Token::StringLiteral(string) => Ok(Literal::StringLiteral(string.into())),
             Token::Number(num) => Ok(Literal::Number(num)),
             token => Err(format!("Illegal token {:?} found", token)),
         }
@@ -454,15 +447,13 @@ mod tests {
                 Expr::Filter(
                     "concat",
                     Box::new(Expr::Identifier("some_var")),
-                    vec![Literal::StringLiteral("various tests ")],
+                    vec![Literal::StringLiteral("various tests ".into())],
                 ),
                 Expr::Raw("\n            "),
                 Expr::Numeric(Numeric::Negate(Box::new(Numeric::Binary(
                     Operator::Asterisk,
                     Box::new(Numeric::Raw(3.4)),
-                    Box::new(
-                        Numeric::Negate(Box::new(Numeric::Identifier("count"))),
-                    ),
+                    Box::new(Numeric::Negate(Box::new(Numeric::Identifier("count")))),
                 )))),
             ]
         );
