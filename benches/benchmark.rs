@@ -1,4 +1,7 @@
 extern crate handlebars;
+
+#[macro_use]
+extern crate zap_derive;
 extern crate zap;
 
 #[macro_use]
@@ -10,9 +13,12 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use handlebars::{to_json, Handlebars};
-use zap::{compile, Environment, FilterInput, Runner};
+use zap::compile;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, ZapRunner, Serialize)]
+#[filter = "sqrt/0n"]
+#[filter = "round/1n"]
+#[filter = "toupper/0s"]
 struct Person {
     id: u64,
     name: String,
@@ -20,119 +26,27 @@ struct Person {
     weight: f64,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum PersonNums {
-    Id,
-    Age,
-    Weight,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum PersonStrs {
-    Name,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum PersonFilters {
-    Sqrt,
-    ToUpper,
-    Round,
-}
-
+#[derive(ZapEnv)]
+#[runner = "Person"]
 struct Provider {
     provider: String,
     provider_code: u32,
 }
 
-impl<'a> Environment<'a, PersonNums, PersonStrs, PersonFilters> for Provider {
-    fn num_constant(&self, name: &str) -> Option<f64> {
-        match name {
-            "provider_code" => Some(self.provider_code as f64),
-            _ => None,
-        }
-    }
-
-    fn str_constant(&self, name: &str) -> Option<&str> {
-        match name {
-            "provider" => Some(&self.provider),
-            _ => None,
-        }
-    }
-
-    fn num_var(name: &str) -> Option<PersonNums> {
-        match name {
-            "id" => Some(PersonNums::Id),
-            "age" => Some(PersonNums::Age),
-            "weight" => Some(PersonNums::Weight),
-            _ => None,
-        }
-    }
-
-    fn str_var(name: &str) -> Option<PersonStrs> {
-        match name {
-            "name" => Some(PersonStrs::Name),
-            _ => None,
-        }
-    }
-
-    fn filter(name: &str) -> Option<(PersonFilters, usize, FilterInput<PersonStrs>)> {
-        match name {
-            "sqrt" => Some((PersonFilters::Sqrt, 0, FilterInput::Numeric)),
-            "round" => Some((PersonFilters::Round, 1, FilterInput::Numeric)),
-            "toupper" => Some((PersonFilters::ToUpper, 0, FilterInput::Stringified)),
-            _ => None,
-        }
-    }
+fn sqrt(_data: &Person, _args: &[f64], input: f64) -> f64 {
+    input.sqrt()
 }
 
-impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
-    fn num_var(&self, var: PersonNums) -> f64 {
-        match var {
-            PersonNums::Id => self.id as f64,
-            PersonNums::Age => self.age as f64,
-            PersonNums::Weight => self.weight as f64,
-        }
-    }
+fn round(_data: &Person, args: &[f64], input: f64) -> f64 {
+    let digits = args[0];
+    let factor = 10u32.pow(digits as u32) as f64;
+    let value = (input * factor).round() as f64;
+    value / factor
+}
 
-    fn str_var(&self, var: PersonStrs) -> &str {
-        match var {
-            PersonStrs::Name => &self.name,
-        }
-    }
-
-    fn filter_num(&self, filter: PersonFilters, args: &[f64], input: f64) -> f64 {
-        match filter {
-            PersonFilters::Sqrt => input.sqrt(),
-            PersonFilters::Round => {
-                let digits = args[0];
-                let factor = 10u32.pow(digits as u32) as f64;
-                let value = input * factor;
-                let value = value.round() as f64;
-                value / factor
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn filter_id(
-        &self,
-        _filter: PersonFilters,
-        _args: &[f64],
-        _input_id: PersonStrs,
-        _buffer: &mut String,
-    ) {
-        unreachable!()
-    }
-
-    fn filter_str(&self, filter: PersonFilters, _args: &[f64], input: &str, buffer: &mut String) {
-        match filter {
-            PersonFilters::ToUpper => {
-                for c in input.as_bytes() {
-                    buffer.push(c.to_ascii_uppercase() as char)
-                }
-            }
-            _ => unreachable!(),
-        }
+fn toupper(_data: &Person, _args: &[f64], input: &str, buffer: &mut String) {
+    for c in input.as_bytes() {
+        buffer.push(c.to_ascii_uppercase() as char)
     }
 }
 
@@ -142,7 +56,7 @@ fn bench_zap(c: &mut Criterion) {
         provider: "apns".to_string(),
         provider_code: 31,
     };
-    let bytecode = match compile(template, &env) {
+    let mut bytecode = match compile(template, &env) {
         Ok(bc) => bc,
         Err(err) => {
             eprintln!("error compiling template: {}", err);
@@ -163,17 +77,11 @@ fn bench_zap(c: &mut Criterion) {
         });
     }
 
-    // reuse these allocations throughout the output process
-    let mut buffer = String::with_capacity(8);
-    let mut stack = Vec::with_capacity(8);
-
     c.bench_function("zap", move |b| {
         b.iter(|| {
             let mut output = Vec::new();
             for person in &group {
-                bytecode
-                    .run_with(person, &mut buffer, &mut stack, &mut output)
-                    .unwrap();
+                bytecode.run_with(person, &mut output).unwrap();
             }
             output
         })
