@@ -81,7 +81,7 @@ fn bench_zap(c: &mut Criterion) {
         b.iter(|| {
             let mut output = Vec::new();
             for person in &group {
-                bytecode.run_with(person, &mut output).unwrap();
+                bytecode.render(person, &mut output).unwrap();
             }
             output
         })

@@ -30,8 +30,8 @@ enum Instr<NumEnum, StrEnum, FilterEnum> {
 #[allow(unused)]
 #[derive(Debug)]
 pub struct Bytecode<NumEnum, StrEnum, FilterEnum> {
-    buffer: String,
-    stack: Vec<f64>,
+    buffer: Option<String>,
+    stack: Option<Vec<f64>>,
     raw_text: String,
     instructions: Vec<Instr<NumEnum, StrEnum, FilterEnum>>,
 }
@@ -55,8 +55,8 @@ impl<
         env: &Env,
     ) -> Result<Bytecode<NumEnum, StrEnum, FilterEnum>, String> {
         let mut ret_val = Bytecode {
-            buffer: String::with_capacity(8),
-            stack: Vec::with_capacity(8),
+            buffer: None,
+            stack: None,
             raw_text: String::new(),
             instructions: vec![],
         };
@@ -68,13 +68,35 @@ impl<
         Ok(ret_val)
     }
 
-    pub fn run_with(
+    /// Renders a template using convenient internally-managed buffers, which requires a mutable reference to self.
+    pub fn render(
         &mut self,
         runner: &Runner<NumEnum, StrEnum, FilterEnum>,
         output: &mut Write,
     ) -> Result<(), ::std::io::Error> {
-        let stack = &mut self.stack;
-        let buffer = &mut self.buffer;
+        let mut stack = self.stack.take().unwrap_or_else(|| Vec::with_capacity(8));
+        let mut buffer = self
+            .buffer
+            .take()
+            .unwrap_or_else(|| String::with_capacity(8));
+
+        let result = self.render_with(runner, output, &mut stack, &mut buffer);
+
+        self.stack = Some(stack);
+        self.buffer = Some(buffer);
+
+        result
+    }
+
+    /// Renders a template using only externally provided buffers, allowing for parallelizing the render process by using
+    /// buffers that are local to the current thread. This allows it to require only an immutable reference to self.
+    pub fn render_with(
+        &self,
+        runner: &Runner<NumEnum, StrEnum, FilterEnum>,
+        output: &mut Write,
+        stack: &mut Vec<f64>,
+        buffer: &mut String,
+    ) -> Result<(), ::std::io::Error> {
         for instr in &self.instructions {
             match *instr {
                 Instr::PushImm(val) => stack.push(val),

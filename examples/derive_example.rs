@@ -76,6 +76,6 @@ fn main() {
     let mut stdout_lock = stdout.lock();
 
     for person in group {
-        bytecode.run_with(&person, &mut stdout_lock).unwrap();
+        bytecode.render(&person, &mut stdout_lock).unwrap();
     }
 }
