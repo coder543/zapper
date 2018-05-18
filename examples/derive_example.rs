@@ -3,7 +3,7 @@ extern crate zap;
 #[macro_use]
 extern crate zap_derive;
 
-use zap::{compile, Environment, FilterInput, Runner};
+use zap::compile;
 
 use std::io::stdout;
 

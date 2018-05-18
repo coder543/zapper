@@ -87,7 +87,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
 
     quote!{
         #[allow(bad_style, unused)]
-        impl<'a> Environment<'a, #num_enum, #str_enum, #filter_enum> for Provider {
+        impl<'a> ::zap::Environment<'a, #num_enum, #str_enum, #filter_enum> for Provider {
             fn num_constant(&self, name: &str) -> Option<f64> {
                 match name {
                     #(#num_match)*
@@ -110,7 +110,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
                 #str_enum::from_str(name)
             }
 
-            fn filter(name: &str) -> Option<(#filter_enum, usize, FilterInput<#str_enum>)> {
+            fn filter(name: &str) -> Option<(#filter_enum, usize, ::zap::FilterInput<#str_enum>)> {
                 #filter_enum::from_str(name)
             }
         }
@@ -238,15 +238,15 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
             match filter_type {
             'n' => {
                 num_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input), });
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::Numeric)), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::Numeric)), )
             }
             's' => {
                 str_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, &input, buffer), });                
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::Stringified)), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::Stringified)), )
             }
             'x' => {
                 custom_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input_id, buffer), });                                
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, FilterInput::StrEnumId(vec![]))), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::StrEnumId(vec![]))), )
             }
             _ => panic!("no such input type as {}, valid options are n (numeric), s (stringified), x (custom)", filter_type)
         }
@@ -293,7 +293,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         }
 
         impl #filter_enum {
-            fn from_str(name: &str) -> Option<(#filter_enum, usize, FilterInput<#str_enum>)> {
+            fn from_str(name: &str) -> Option<(#filter_enum, usize, ::zap::FilterInput<#str_enum>)> {
                 match name {
                     #(#filter_from)*
                     _ => None
@@ -302,7 +302,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         }
 
         #[allow(bad_style, unused)]
-        impl Runner<#num_enum, #str_enum, #filter_enum> for #name {
+        impl ::zap::Runner<#num_enum, #str_enum, #filter_enum> for #name {
             fn num_var(&self, var: #num_enum) -> f64 {
                 match var {
                    #(#num_match)*
