@@ -27,7 +27,8 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
     let mut filters = vec![];
     for attr in ast.attrs {
         let attr_name = attr.path.segments[0].ident.to_string();
-        let val = attr.tts
+        let val = attr
+            .tts
             .into_iter()
             .skip(1)
             .next()
@@ -40,6 +41,24 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
             _ => panic!("unexpected attribute {}", attr_name),
         };
     }
+    let mut num_fields = vec![];
+    let mut str_fields = vec![];
+    match ast.data {
+        Data::Struct(data) => match data.fields {
+            Fields::Named(fields) => {
+                for field in fields.named {
+                    let id = field.ident.unwrap();
+                    if is_num(field.ty) {
+                        num_fields.push(id);
+                    } else {
+                        str_fields.push(id);
+                    }
+                }
+            }
+            _ => panic!("must have named fields"),
+        },
+        _ => panic!("only works on structs"),
+    }
 
     let runner = runner.expect(&format!(
         "You must provide a #[runner = ZapRunnerStruct] annotation on the \"{}\" struct.",
@@ -50,26 +69,54 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
     let str_enum = Ident::new(&(runner.to_string() + "Strs"), runner.span());
     let filter_enum = Ident::new(&(runner.to_string() + "Filters"), runner.span());
 
+    let num_match = num_fields
+        .iter()
+        .map(|f| {
+            let fs = f.to_string();
+            quote! { #fs => Some(self.#f as f64), }
+        })
+        .collect::<Vec<_>>();
+
+    let str_match = str_fields
+        .iter()
+        .map(|f| {
+            let fs = f.to_string();
+            quote! { #fs => Some(&self.#f), }
+        })
+        .collect::<Vec<_>>();
+
     quote!{
+        #[allow(bad_style, unused)]
         impl<'a> Environment<'a, #num_enum, #str_enum, #filter_enum> for Provider {
             fn num_constant(&self, name: &str) -> Option<f64> {
-                None
+                match name {
+                    #(#num_match)*
+                    _ => None
+                }
             }
 
             fn str_constant(&self, name: &str) -> Option<&str> {
-                None
+                match name {
+                    #(#str_match)*
+                    _ => None
+                }
             }
 
-            fn num_var(name: &str) -> Option<PersonNums> {
-                None
+            fn num_var(name: &str) -> Option<#num_enum> {
+                #num_enum::from_str(name)
             }
 
-            fn str_var(name: &str) -> Option<PersonStrs> {
-                None
+            fn str_var(name: &str) -> Option<#str_enum> {
+                #str_enum::from_str(name)
             }
 
-            fn filter(name: &str) -> Option<(PersonFilters, usize, FilterInput<PersonStrs>)> {
-                None
+            fn filter(name: &str) -> Option<(#filter_enum, usize, FilterInput<#str_enum>)> {
+                match name {
+                    // "sqrt" => Some((PersonFilters::Sqrt, 0, FilterInput::Numeric)),
+                    // "round" => Some((PersonFilters::Round, 1, FilterInput::Numeric)),
+                    // "toupper" => Some((PersonFilters::ToUpper, 0, FilterInput::Stringified)),
+                    _ => None,
+                }
             }
         }
     }
@@ -108,7 +155,8 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
     let mut filters = vec![];
     for attr in ast.attrs {
         let name = attr.path.segments[0].ident.to_string();
-        let val = attr.tts
+        let val = attr
+            .tts
             .into_iter()
             .skip(1)
             .next()
@@ -146,27 +194,66 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         .iter()
         .map(|f| quote! { #f => self.#f as f64, })
         .collect::<Vec<_>>();
-    let str_match = str_fields
+
+    let num_from = num_fields
         .iter()
-        .map(|f| quote! { #f => Cow::from(&*self.#f).into(), })
+        .map(|f| {
+            let fs = f.to_string();
+            quote! { #fs => Some(#num_enum::#f), }
+        })
         .collect::<Vec<_>>();
 
-    quote! {
-        use std::borrow::Cow;
+    let str_match = str_fields
+        .iter()
+        .map(|f| quote! { #f => ::std::borrow::Cow::from(&*self.#f).into(), })
+        .collect::<Vec<_>>();
 
+    let str_from = str_fields
+        .iter()
+        .map(|f| {
+            let fs = f.to_string();
+            quote! { #fs => Some(#str_enum::#f), }
+        })
+        .collect::<Vec<_>>();
+
+    // println!(
+    //     "{:#?}",
+    quote! {
+        #[allow(bad_style)]
         #[derive(Copy, Clone, Debug, PartialEq)]
         enum #num_enum {
             #(#num_fields,)*
         }
 
+        impl #num_enum {
+            fn from_str(name: &str) -> Option<#num_enum> {
+                match name {
+                    #(#num_from)*
+                    _ => None
+                }
+            }
+        }
+
+        #[allow(bad_style)]
         #[derive(Copy, Clone, Debug, PartialEq)]
         enum #str_enum {
             #(#str_fields,)*
         }
 
+        impl #str_enum {
+            fn from_str(name: &str) -> Option<#str_enum> {
+                match name {
+                    #(#str_from)*
+                    _ => None
+                }
+            }
+        }
+
+        #[allow(bad_style)]
         #[derive(Copy, Clone, Debug, PartialEq)]
         enum #filter_enum {}
 
+        #[allow(bad_style, unused)]
         impl Runner<#num_enum, #str_enum, #filter_enum> for #name {
             fn num_var(&self, var: #num_enum) -> f64 {
                 use #num_enum::*;
@@ -175,7 +262,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
                 }
             }
 
-            fn str_var(&self, var: #str_enum) -> Cow<str> {
+            fn str_var(&self, var: #str_enum) -> ::std::borrow::Cow<str> {
                 use #str_enum::*;
                 match var {
                     #(#str_match)*
@@ -196,9 +283,11 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
                 unreachable!()
             }
 
-            fn filter_str(&self, filter: #filter_enum, _args: &[f64], input: Cow<str>, buffer: &mut String) {
+            fn filter_str(&self, filter: #filter_enum, _args: &[f64], input: ::std::borrow::Cow<str>, buffer: &mut String) {
                 unreachable!()
             }
         }
     }
+    // );
+    // unreachable!();
 }
