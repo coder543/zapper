@@ -25,7 +25,7 @@ struct Provider {
     provider_code: u32,
 }
 
-fn sqrt(_data: &Person, args: &[f64], input: f64) -> f64 {
+fn sqrt(_data: &Person, _args: &[f64], input: f64) -> f64 {
     input.sqrt()
 }
 
@@ -47,11 +47,11 @@ fn main() {
         "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
 
     let env = Provider {
-        provider: "apns".to_string(),
+        provider: "john doe".to_string(),
         provider_code: 31,
     };
 
-    let bytecode = match compile(template, &env) {
+    let mut bytecode = match compile(template, &env) {
         Ok(bc) => bc,
         Err(err) => {
             eprintln!("error compiling template: {}", err);
@@ -72,15 +72,10 @@ fn main() {
         });
     }
 
-    // reuse these allocations throughout the output process
-    let mut buffer = String::with_capacity(8);
-    let mut stack = Vec::with_capacity(8);
     let stdout = stdout();
     let mut stdout_lock = stdout.lock();
 
     for person in group {
-        bytecode
-            .run_with(&person, &mut buffer, &mut stack, &mut stdout_lock)
-            .unwrap();
+        bytecode.run_with(&person, &mut stdout_lock).unwrap();
     }
 }

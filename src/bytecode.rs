@@ -30,6 +30,8 @@ enum Instr<NumEnum, StrEnum, FilterEnum> {
 #[allow(unused)]
 #[derive(Debug)]
 pub struct Bytecode<NumEnum, StrEnum, FilterEnum> {
+    buffer: String,
+    stack: Vec<f64>,
     raw_text: String,
     instructions: Vec<Instr<NumEnum, StrEnum, FilterEnum>>,
 }
@@ -53,6 +55,8 @@ impl<
         env: &Env,
     ) -> Result<Bytecode<NumEnum, StrEnum, FilterEnum>, String> {
         let mut ret_val = Bytecode {
+            buffer: String::with_capacity(8),
+            stack: Vec::with_capacity(8),
             raw_text: String::new(),
             instructions: vec![],
         };
@@ -65,12 +69,12 @@ impl<
     }
 
     pub fn run_with(
-        &self,
+        &mut self,
         runner: &Runner<NumEnum, StrEnum, FilterEnum>,
-        buffer: &mut String,
-        stack: &mut Vec<f64>,
         output: &mut Write,
     ) -> Result<(), ::std::io::Error> {
+        let stack = &mut self.stack;
+        let buffer = &mut self.buffer;
         for instr in &self.instructions {
             match *instr {
                 Instr::PushImm(val) => stack.push(val),
