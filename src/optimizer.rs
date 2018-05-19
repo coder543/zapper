@@ -16,7 +16,29 @@ pub fn optimize<
 ) -> Vec<Expr<'a>> {
     ast.into_iter()
         .map(|tree| optimize_tree(tree, env, 20))
-        .collect()
+        .map(|tree| optimize_tree(tree, env, 20))
+        .fold(Vec::new(), |mut acc, v| {
+            if let Some(t) = acc.pop() {
+                match (t, v) {
+                    (Expr::Raw(raw_str), Expr::StringLiteral(lit)) => {
+                        acc.push(Expr::StringLiteral((raw_str.to_string() + &lit).into()));
+                    }
+                    (Expr::StringLiteral(lit1), Expr::StringLiteral(lit2)) => {
+                        acc.push(Expr::StringLiteral((lit1.to_string() + &lit2).into()));
+                    }
+                    (Expr::StringLiteral(lit), Expr::Raw(raw_str)) => {
+                        acc.push(Expr::StringLiteral((lit.to_string() + raw_str).into()));
+                    }
+                    (t, v) => {
+                        acc.push(t);
+                        acc.push(v);
+                    }
+                }
+            } else {
+                acc.push(v);
+            }
+            acc
+        })
 }
 
 pub fn optimize_tree<
@@ -44,6 +66,7 @@ pub fn optimize_tree<
                 Expr::Identifier(id)
             }
         }
+        Expr::Numeric(Numeric::Raw(val)) => Expr::StringLiteral(val.to_string().into()),
         Expr::Numeric(numeric) => Expr::Numeric(optimize_numeric(numeric, env, effort)),
         Expr::Filter(id, expr, args) => {
             let expr = optimize_tree(*expr, env, effort);
