@@ -2,6 +2,8 @@
 name = "zapper"
 version = "0.1.0"
 authors = ["Josh Leverette <coder543@gmail.com>"]
+license = "MIT"
+description = "lightning fast templating engine"
 
 # uncomment if doing benchmarks
 # otherwise, it just slows down compilation of examples
@@ -13,7 +15,7 @@ authors = ["Josh Leverette <coder543@gmail.com>"]
 # serde = "1.0.43"
 
 [dependencies]
-zapper_derive = { path = "./zapper-derive" }
+zapper_derive = "0.1.0"
 
 [[bench]]
 name = "benchmark"
