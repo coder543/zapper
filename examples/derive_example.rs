@@ -5,7 +5,7 @@ use zapper::compile;
 
 use std::io::stdout;
 
-#[derive(Clone, ZapperRunner)]
+#[derive(ZapperRunner)]
 #[filter = "sqrt/0n"]
 #[filter = "round/1n"]
 #[filter = "toupper/0s"]

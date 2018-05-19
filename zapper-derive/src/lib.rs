@@ -9,7 +9,68 @@ use syn::{Data, Fields, Ident, Type};
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(ZapperEnv, attributes(runner))]
+struct Analysis {
+    filters: Vec<String>,
+    num_fields: Vec<Ident>,
+    str_fields: Vec<(Ident, bool)>,
+    runner: Option<Ident>,
+}
+
+impl Analysis {
+    fn from(ast: &syn::DeriveInput) -> Analysis {
+        let name = ast.ident;
+        let mut filters = vec![];
+        let mut runner = None;
+        for attr in &ast.attrs {
+            let attr_name = attr.path.segments[0].ident.to_string();
+            let val = attr.tts
+                .clone()
+                .into_iter()
+                .skip(1)
+                .next()
+                .expect(&format!("Error: Expected #[{} = value]", attr_name))
+                .to_string()
+                .replace("\"", "");
+            match attr_name.as_str() {
+                "filter" => filters.push(val.to_string()),
+                "runner" => runner = Some(Ident::new(&val, name.span())),
+                _ => panic!("unexpected attribute {}", attr_name),
+            };
+        }
+        let mut num_fields = vec![];
+        let mut str_fields = vec![];
+        match &ast.data {
+            Data::Struct(data) => match &data.fields {
+                Fields::Named(fields) => {
+                    'fieldpush: for field in &fields.named {
+                        for attr in &field.attrs {
+                            if attr.path.segments[0].ident.to_string() == "zapper_ignore" {
+                                continue 'fieldpush;
+                            }
+                        }
+                        let id = field.ident.unwrap();
+                        if is_num(&field.ty) {
+                            num_fields.push(id);
+                        } else {
+                            str_fields.push((id, is_str_primitive(&field.ty)));
+                        }
+                    }
+                }
+                _ => panic!("must have named fields"),
+            },
+            _ => panic!("only works on structs"),
+        }
+
+        Analysis {
+            filters,
+            num_fields,
+            str_fields,
+            runner,
+        }
+    }
+}
+
+#[proc_macro_derive(ZapperEnv, attributes(runner, zapper_ignore))]
 pub fn zapper_env_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
@@ -22,43 +83,16 @@ pub fn zapper_env_derive(input: TokenStream) -> TokenStream {
 }
 
 fn impl_zapper_env(ast: syn::DeriveInput) -> quote::Tokens {
+    let Analysis {
+        filters,
+        num_fields,
+        str_fields,
+        runner,
+    } = Analysis::from(&ast);
+
+    assert_eq!(filters.len(), 0, "ZapperEnv should not have any filters");
+
     let name = ast.ident;
-    let mut runner = None;
-    let mut filters = vec![];
-    for attr in ast.attrs {
-        let attr_name = attr.path.segments[0].ident.to_string();
-        let val = attr
-            .tts
-            .into_iter()
-            .skip(1)
-            .next()
-            .expect(&format!("Error: Expected #[{} = value]", attr_name))
-            .to_string()
-            .replace("\"", "");
-        match attr_name.as_str() {
-            "filter" => filters.push(val),
-            "runner" => runner = Some(Ident::new(&val, name.span())),
-            _ => panic!("unexpected attribute {}", attr_name),
-        };
-    }
-    let mut num_fields = vec![];
-    let mut str_fields = vec![];
-    match ast.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Named(fields) => {
-                for field in fields.named {
-                    let id = field.ident.unwrap();
-                    if is_num(field.ty) {
-                        num_fields.push(id);
-                    } else {
-                        str_fields.push(id);
-                    }
-                }
-            }
-            _ => panic!("must have named fields"),
-        },
-        _ => panic!("only works on structs"),
-    }
 
     let runner = runner.expect(&format!(
         "You must provide a #[runner = ZapperRunnerStruct] annotation on the \"{}\" struct.",
@@ -79,9 +113,13 @@ fn impl_zapper_env(ast: syn::DeriveInput) -> quote::Tokens {
 
     let str_match = str_fields
         .iter()
-        .map(|f| {
+        .map(|(f, prim)| {
             let fs = f.to_string();
-            quote! { #fs => ::std::borrow::Cow::from(&*self.#f).into(), }
+            if *prim {
+                quote! { #fs => ::std::borrow::Cow::from(&*self.#f).into(), }
+            } else {
+                quote! { #fs => ::std::borrow::Cow::from(self.#f.to_string()).into(), }
+            }
         })
         .collect::<Vec<_>>();
 
@@ -117,7 +155,7 @@ fn impl_zapper_env(ast: syn::DeriveInput) -> quote::Tokens {
     }
 }
 
-#[proc_macro_derive(ZapperRunner, attributes(filter))]
+#[proc_macro_derive(ZapperRunner, attributes(filter, zapper_ignore))]
 pub fn zapper_runner_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
@@ -131,7 +169,7 @@ pub fn zapper_runner_derive(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-fn is_num(ty: Type) -> bool {
+fn is_num(ty: &Type) -> bool {
     match ty {
         Type::Path(ty_path) => {
             let ty = ty_path.path.segments[0].ident.to_string();
@@ -145,49 +183,40 @@ fn is_num(ty: Type) -> bool {
     }
 }
 
-fn impl_zapper_runner(ast: syn::DeriveInput) -> quote::Tokens {
-    let name = ast.ident;
-    let mut filters = vec![];
-    for attr in ast.attrs {
-        let name = attr.path.segments[0].ident.to_string();
-        let val = attr
-            .tts
-            .into_iter()
-            .skip(1)
-            .next()
-            .expect(&format!("Error: Expected #[{} = value]", name))
-            .to_string()
-            .replace("\"", "");
-        match name.as_str() {
-            "filter" => filters.push(val),
-            _ => panic!("unexpected attribute {}", name),
-        };
-    }
-    let mut num_fields = vec![];
-    let mut str_fields = vec![];
-    match ast.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Named(fields) => {
-                for field in fields.named {
-                    let id = field.ident.unwrap();
-                    if is_num(field.ty) {
-                        num_fields.push(id);
-                    } else {
-                        str_fields.push(id);
-                    }
-                }
+fn is_str_primitive(ty: &Type) -> bool {
+    match ty {
+        Type::Path(ty_path) => {
+            let ty = ty_path.path.segments[0].ident.to_string();
+            match ty.as_str() {
+                "str" | "String" => true,
+                _ => false,
             }
-            _ => panic!("must have named fields"),
-        },
-        _ => panic!("only works on structs"),
+        }
+        _ => false,
     }
+}
+
+fn impl_zapper_runner(ast: syn::DeriveInput) -> quote::Tokens {
+    let Analysis {
+        filters,
+        num_fields,
+        str_fields,
+        runner,
+    } = Analysis::from(&ast);
+
+    assert!(
+        runner.is_none(),
+        "ZapperRunner should not have a runner attribute"
+    );
+
+    let name = ast.ident;
+
     let num_enum = Ident::new(&(name.to_string() + "Nums"), name.span());
     let str_enum = Ident::new(&(name.to_string() + "Strs"), name.span());
     let filter_enum = Ident::new(&(name.to_string() + "Filters"), name.span());
     let filter_fields = filters.iter().map(|f| {
         Ident::new(
-            &f[..f
-                   .find('/')
+            &f[..f.find('/')
                    .expect("filters must specify number of args and return type.")],
             name.span(),
         )
@@ -208,12 +237,18 @@ fn impl_zapper_runner(ast: syn::DeriveInput) -> quote::Tokens {
 
     let str_match = str_fields
         .iter()
-        .map(|f| quote! { #str_enum::#f => ::std::borrow::Cow::from(&*self.#f).into(), })
+        .map(|(f, prim)| {
+            if *prim {
+                quote! { #str_enum::#f => ::std::borrow::Cow::from(&*self.#f).into(), }
+            } else {
+                quote! { #str_enum::#f => ::std::borrow::Cow::from(self.#f.to_string()).into(), }
+            }
+        })
         .collect::<Vec<_>>();
 
     let str_from = str_fields
         .iter()
-        .map(|f| {
+        .map(|(f, _prim)| {
             let fs = f.to_string();
             quote! { #fs => Some(#str_enum::#f), }
         })
@@ -223,11 +258,12 @@ fn impl_zapper_runner(ast: syn::DeriveInput) -> quote::Tokens {
     let mut str_filters = vec![];
     let mut custom_filters = vec![];
 
+    let str_fields = str_fields.into_iter().map(|(f, _)| f);
+
     let filter_from = filters
         .iter()
         .map(|f| {
-            let split = f
-                .find('/')
+            let split = f.find('/')
                 .expect("filters must specify number of args and return type.");
             let filter = &f[..split];
             let filter_i = Ident::new(&filter, name.span());
