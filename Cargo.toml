@@ -5,12 +5,12 @@ authors = ["Josh Leverette <coder543@gmail.com>"]
 
 # uncomment if doing benchmarks
 # otherwise, it just slows down compilation of examples
-[dev-dependencies]
-criterion = "0.2.3"
-handlebars = "0.32.0"
-serde_json = "1.0.16"
-serde_derive = "1.0.43"
-serde = "1.0.43"
+# [dev-dependencies]
+# criterion = "0.2.3"
+# handlebars = "0.32.0"
+# serde_json = "1.0.16"
+# serde_derive = "1.0.43"
+# serde = "1.0.43"
 
 [dependencies]
 zapper_derive = { path = "./zapper-derive" }
