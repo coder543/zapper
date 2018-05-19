@@ -1,6 +1,6 @@
 extern crate zapper;
 
-use zap::{compile, Environment, FilterInput, Runner};
+use zapper::{compile, Environment, FilterInput, Runner};
 
 use std::borrow::Cow;
 use std::io::stdout;
