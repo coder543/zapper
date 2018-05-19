@@ -9,19 +9,19 @@ use syn::{Data, Fields, Ident, Type};
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(ZapEnv, attributes(runner))]
-pub fn zap_env_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ZapperEnv, attributes(runner))]
+pub fn zapper_env_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
 
     // Build the impl
-    let gen = impl_zap_env(ast);
+    let gen = impl_zapper_env(ast);
 
     // Return the generated impl
     gen.into()
 }
 
-fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
+fn impl_zapper_env(ast: syn::DeriveInput) -> quote::Tokens {
     let name = ast.ident;
     let mut runner = None;
     let mut filters = vec![];
@@ -61,7 +61,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
     }
 
     let runner = runner.expect(&format!(
-        "You must provide a #[runner = ZapRunnerStruct] annotation on the \"{}\" struct.",
+        "You must provide a #[runner = ZapperRunnerStruct] annotation on the \"{}\" struct.",
         name
     ));
 
@@ -87,7 +87,7 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
 
     quote!{
         #[allow(bad_style, unused)]
-        impl<'a> ::zap::Environment<'a, #num_enum, #str_enum, #filter_enum> for Provider {
+        impl<'a> ::zapper::Environment<'a, #num_enum, #str_enum, #filter_enum> for Provider {
             fn num_constant(&self, name: &str) -> Option<f64> {
                 match name {
                     #(#num_match)*
@@ -110,20 +110,20 @@ fn impl_zap_env(ast: syn::DeriveInput) -> quote::Tokens {
                 #str_enum::from_str(name)
             }
 
-            fn filter(name: &str) -> Option<(#filter_enum, usize, ::zap::FilterInput<#str_enum>)> {
+            fn filter(name: &str) -> Option<(#filter_enum, usize, ::zapper::FilterInput<#str_enum>)> {
                 #filter_enum::from_str(name)
             }
         }
     }
 }
 
-#[proc_macro_derive(ZapRunner, attributes(filter))]
-pub fn zap_runner_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ZapperRunner, attributes(filter))]
+pub fn zapper_runner_derive(input: TokenStream) -> TokenStream {
     // Parse the string representation
     let ast = syn::parse(input).unwrap();
 
     // Build the impl
-    let gen = impl_zap_runner(ast);
+    let gen = impl_zapper_runner(ast);
 
     // panic!("{:#?}", gen);
 
@@ -145,7 +145,7 @@ fn is_num(ty: Type) -> bool {
     }
 }
 
-fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
+fn impl_zapper_runner(ast: syn::DeriveInput) -> quote::Tokens {
     let name = ast.ident;
     let mut filters = vec![];
     for attr in ast.attrs {
@@ -238,15 +238,15 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
             match filter_type {
             'n' => {
                 num_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input), });
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::Numeric)), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zapper::FilterInput::Numeric)), )
             }
             's' => {
                 str_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, &input, buffer), });                
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::Stringified)), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zapper::FilterInput::Stringified)), )
             }
             'x' => {
                 custom_filters.push(quote! { #filter_enum::#filter_i => #filter_i(self, args, input_id, buffer), });                                
-                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zap::FilterInput::StrEnumId(vec![]))), )
+                quote!( #filter => Some((#filter_enum::#filter_i, #arg_count, ::zapper::FilterInput::StrEnumId(vec![]))), )
             }
             _ => panic!("no such input type as {}, valid options are n (numeric), s (stringified), x (custom)", filter_type)
         }
@@ -293,7 +293,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         }
 
         impl #filter_enum {
-            fn from_str(name: &str) -> Option<(#filter_enum, usize, ::zap::FilterInput<#str_enum>)> {
+            fn from_str(name: &str) -> Option<(#filter_enum, usize, ::zapper::FilterInput<#str_enum>)> {
                 match name {
                     #(#filter_from)*
                     _ => None
@@ -302,7 +302,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
         }
 
         #[allow(bad_style, unused)]
-        impl ::zap::Runner<#num_enum, #str_enum, #filter_enum> for #name {
+        impl ::zapper::Runner<#num_enum, #str_enum, #filter_enum> for #name {
             fn num_var(&self, var: #num_enum) -> f64 {
                 match var {
                    #(#num_match)*
@@ -318,14 +318,14 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
             fn filter_num(&self, filter: #filter_enum, args: &[f64], input: f64) -> f64 {
                 match filter {
                     #(#num_filters)*
-                    _ => unreachable!("bug in zap! attempted to execute {:?} as a numeric filter erroneously", filter)
+                    _ => unreachable!("bug in zapper! attempted to execute {:?} as a numeric filter erroneously", filter)
                 }
             }
 
             fn filter_str(&self, filter: #filter_enum, args: &[f64], input: ::std::borrow::Cow<str>, buffer: &mut String) {
                 match filter {
                     #(#str_filters)*
-                    _ => unreachable!("bug in zap! attempted to execute {:?} as a string filter erroneously", filter)
+                    _ => unreachable!("bug in zapper! attempted to execute {:?} as a string filter erroneously", filter)
                 }
             }
 
@@ -338,7 +338,7 @@ fn impl_zap_runner(ast: syn::DeriveInput) -> quote::Tokens {
             ) {
                 match filter {
                     #(#custom_filters)*
-                    _ => unreachable!("bug in zap! attempted to execute {:?} as a custom filter erroneously", filter)
+                    _ => unreachable!("bug in zapper! attempted to execute {:?} as a custom filter erroneously", filter)
                 }
             }
         }

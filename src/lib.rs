@@ -1,3 +1,8 @@
+#[allow(unused_imports)]
+#[macro_use]
+extern crate zapper_derive;
+pub use zapper_derive::*;
+
 pub mod ast;
 pub mod bytecode;
 pub mod optimizer;

@@ -1,6 +1,6 @@
 [package]
 authors = ["Josh Leverette <coder543@gmail.com>"]
-name = "zap_derive"
+name = "zapper_derive"
 version = "0.1.0"
 
 [lib]

@@ -1,4 +1,4 @@
-extern crate zap;
+extern crate zapper;
 
 use zap::{compile, Environment, FilterInput, Runner};
 

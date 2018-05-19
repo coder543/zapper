@@ -1,8 +1,7 @@
 extern crate handlebars;
 
 #[macro_use]
-extern crate zap_derive;
-extern crate zap;
+extern crate zapper;
 
 #[macro_use]
 extern crate criterion;
@@ -13,9 +12,9 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use handlebars::{to_json, Handlebars};
-use zap::compile;
+use zapper::compile;
 
-#[derive(Clone, ZapRunner, Serialize)]
+#[derive(Clone, ZapperRunner, Serialize)]
 #[filter = "sqrt/0n"]
 #[filter = "round/1n"]
 #[filter = "toupper/0s"]
@@ -26,7 +25,7 @@ struct Person {
     weight: f64,
 }
 
-#[derive(ZapEnv)]
+#[derive(ZapperEnv)]
 #[runner = "Person"]
 struct Provider {
     provider: String,
@@ -50,7 +49,7 @@ fn toupper(_data: &Person, _args: &[f64], input: &str, buffer: &mut String) {
     }
 }
 
-fn bench_zap(c: &mut Criterion) {
+fn bench_zapper(c: &mut Criterion) {
     let template = "{{provider}} {{provider_code}} {{id}} {{name}} {{age}} {{weight}}kg\n";
     let env = Provider {
         provider: "apns".to_string(),
@@ -77,7 +76,7 @@ fn bench_zap(c: &mut Criterion) {
         });
     }
 
-    c.bench_function("zap", move |b| {
+    c.bench_function("zapper", move |b| {
         b.iter(|| {
             let mut output = Vec::new();
             for person in &group {
@@ -125,7 +124,7 @@ pub fn benches() {
         .configure_from_args()
         .sample_size(200)
         .measurement_time(Duration::from_secs(40));
-    bench_zap(&mut criterion);
+    bench_zapper(&mut criterion);
     bench_hbs(&mut criterion);
 }
 

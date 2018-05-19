@@ -1,13 +1,11 @@
-extern crate zap;
-
 #[macro_use]
-extern crate zap_derive;
+extern crate zapper;
 
-use zap::compile;
+use zapper::compile;
 
 use std::io::stdout;
 
-#[derive(Clone, ZapRunner)]
+#[derive(Clone, ZapperRunner)]
 #[filter = "sqrt/0n"]
 #[filter = "round/1n"]
 #[filter = "toupper/0s"]
@@ -18,7 +16,7 @@ struct Person {
     weight: f64,
 }
 
-#[derive(ZapEnv)]
+#[derive(ZapperEnv)]
 #[runner = "Person"]
 struct Provider {
     provider: String,

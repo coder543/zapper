@@ -102,8 +102,8 @@ impl<
                 Instr::PushImm(val) => stack.push(val),
                 Instr::PushNum(id) => stack.push(runner.num_var(id)),
                 Instr::PrintReg => write!(output, "{}", pop!(stack))?,
-                Instr::PrintRaw(start, end) => write!(output, "{}", &self.raw_text[start..end])?,
-                Instr::PrintStr(id) => write!(output, "{}", runner.str_var(id))?,
+                Instr::PrintRaw(start, end) => output.write_all(&self.raw_text[start..end].as_bytes())?,
+                Instr::PrintStr(id) => output.write_all(runner.str_var(id).as_bytes())?,
                 Instr::PrintNum(id) => write!(output, "{}", runner.num_var(id))?,
                 Instr::Add => {
                     let right = pop!(stack);
