@@ -1,9 +1,10 @@
 [package]
 name = "zapper"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Josh Leverette <coder543@gmail.com>"]
 license = "MIT"
 description = "lightning fast templating engine"
+repository = "https://github.com/coder543/zapper"
 
 # uncomment if doing benchmarks
 # otherwise, it just slows down compilation of examples
