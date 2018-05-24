@@ -1,0 +1,8 @@
+[package]
+name = "zapper-fuzz-target"
+version = "0.1.0"
+authors = ["Josh Leverette <jleverette@onesignal.com>"]
+
+[dependencies]
+afl = "0.4.0"
+zapper = { path = ".." }

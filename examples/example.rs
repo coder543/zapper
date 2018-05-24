@@ -98,6 +98,9 @@ impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
             PersonFilters::Sqrt => input.sqrt(),
             PersonFilters::Round => {
                 let digits = args[0];
+                if digits > 10.0 {
+                    return input;
+                }
                 let factor = 10u32.pow(digits as u32) as f64;
                 let value = input * factor;
                 let value = value.round() as f64;
@@ -136,7 +139,7 @@ impl Runner<PersonNums, PersonStrs, PersonFilters> for Person {
 }
 
 fn main() {
-    let template = "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
+    let template = include_str!("../zapper-fuzz-target/out/hangs/id:000000,src:000980,op:flip1,pos:683");
 
     let env = Provider {
         provider: "john doe".to_string(),

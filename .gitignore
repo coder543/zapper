@@ -2,3 +2,5 @@
 /target
 **/*.rs.bk
 Cargo.lock
+zapper-afl/target
+zapper-afl/out

@@ -78,7 +78,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             let word = self.source.split_whitespace().next()?;
 
             // whitespace-aware starting position
-            let word_start = self.source.find(&word[0..1]).unwrap();
+            let word_start = self.source.find(word.chars().next().unwrap()).unwrap();
             self.source = &self.source[word_start..];
 
             let word_len = word.len();

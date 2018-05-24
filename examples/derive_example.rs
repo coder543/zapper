@@ -29,6 +29,9 @@ fn sqrt(_data: &Person, _args: &[f64], input: f64) -> f64 {
 
 fn round(_data: &Person, args: &[f64], input: f64) -> f64 {
     let digits = args[0];
+    if digits > 10.0 {
+        return input;
+    }
     let factor = 10u32.pow(digits as u32) as f64;
     let value = (input * factor).round() as f64;
     value / factor
