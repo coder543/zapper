@@ -1,6 +1,8 @@
 #[allow(unused_imports)]
+#[cfg(feature = "derive")]
 #[macro_use]
 extern crate zapper_derive;
+#[cfg(feature = "derive")]
 pub use zapper_derive::*;
 
 pub mod ast;
