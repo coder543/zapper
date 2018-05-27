@@ -8,8 +8,6 @@ use std::io::Write;
 use tokenizer::Operator;
 
 #[cfg(feature = "rayon")]
-use rayon::iter::IntoParallelRefIterator;
-#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
 #[allow(unused)]
@@ -74,58 +72,43 @@ impl<
     }
 
     /// Renders a template across multiple items in parallel using Rayon with
-    /// convenient internally-managed buffers.
+    /// convenient internally-managed buffers. par_chunk_size controls the number
+    /// of iterations that are rendered on each thread before locking the mutex
+    /// that wraps `output` to write out the work done so far.
     ///
-    /// NOTE: This function makes serious trade-offs to enable the _maximum_ throughput.
-    /// It is far less efficient, and builds up a single buffer containing all results
-    /// prior to writing this buffer into the output, so it can consume much more memory,
-    /// and the latency to first-write is also significantly higher.
+    /// NOTE: This function makes trade-offs to enable the _maximum_ throughput.
+    /// It is less efficient, but given the right par_chunk_size and right number
+    /// of cores, it can increase total throughput.
     ///
-    /// Only use if total throughput is the sole concern.
+    /// A recommended starting point for par_chunk_size is 20.
     #[cfg(feature = "rayon")]
-    pub fn par_render<'b, RunnerItem>(
+    pub fn par_render<'b, RunnerItem, Writer>(
         &self,
         runner: &[RunnerItem],
-        output: &mut Write,
-    ) -> Result<(), Vec<::std::io::Error>>
+        output: &mut Writer,
+        par_chunk_size: usize,
+    ) -> Result<(), ::std::io::Error>
     where
         RunnerItem: 'b + Runner<NumEnum, StrEnum, FilterEnum> + Send + Sync,
+        Writer: Write + Send,
     {
         thread_local!(static STORE: (Vec<f64>, String) = (Vec::with_capacity(8), String::with_capacity(8)));
 
-        let results: Result<Vec<u8>, Vec<::std::io::Error>> = runner
-            .par_iter()
-            .map(|item| {
+        let output = ::std::sync::Mutex::new(output);
+
+        runner
+            .par_chunks(par_chunk_size)
+            .map(|items| {
                 STORE.with(|(ref mut stack, ref mut buffer)| {
                     let mut write_buf = Vec::with_capacity(8);
-                    write_buf.clear();
-                    self.render_with(item, &mut write_buf, stack, buffer)
-                        .map(|_| write_buf)
-                        .map_err(|e| vec![e])
+                    for item in items {
+                        self.render_with(item, &mut write_buf, stack, buffer)?;
+                    }
+                    output.lock().unwrap().write_all(&write_buf)?;
+                    return Ok(());
                 })
             })
-            .reduce(
-                || Ok(Vec::with_capacity(32)),
-                |acc, item| match (acc, item) {
-                    (Ok(mut buf), Ok(new_buf)) => {
-                        buf.extend(new_buf);
-                        Ok(buf)
-                    }
-                    (Err(mut errors), Err(new_errors)) => {
-                        errors.extend(new_errors);
-                        Err(errors)
-                    }
-                    (Err(errs), _) | (_, Err(errs)) => Err(errs),
-                },
-            );
-
-        match results {
-            Ok(result) => match output.write_all(&result) {
-                Ok(_) => Ok(()),
-                Err(e) => Err(vec![e]),
-            },
-            Err(errors) => Err(errors),
-        }
+            .collect()
     }
 
     /// Renders a template using convenient internally-managed buffers, which requires a mutable reference to self.
