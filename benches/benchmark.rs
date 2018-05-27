@@ -63,9 +63,7 @@ fn bench_zapper(c: &mut Criterion) {
         }
     };
 
-    // println!("bytecode: {:#?}", bytecode);
-
-    // build up a group of 100 (similar) people
+    // build up a group of 1000 (similar) people
     let mut group = vec![];
     for i in 0..1000 {
         group.push(Person {
@@ -101,9 +99,7 @@ fn bench_zapper_par(c: &mut Criterion) {
         }
     };
 
-    // println!("bytecode: {:#?}", bytecode);
-
-    // build up a group of 100 (similar) people
+    // build up a group of 1000 (similar) people
     let mut group = vec![];
     for i in 0..1000 {
         group.push(Person {
