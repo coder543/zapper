@@ -67,7 +67,7 @@ fn bench_zapper(c: &mut Criterion) {
 
     // build up a group of 100 (similar) people
     let mut group = vec![];
-    for i in 0..10000 {
+    for i in 0..100 {
         group.push(Person {
             id: 12 + i,
             name: "Bob".to_string(),
@@ -93,7 +93,7 @@ fn bench_zapper_par(c: &mut Criterion) {
         provider: "apns".to_string(),
         provider_code: 31,
     };
-    let mut bytecode = match compile(template, &env) {
+    let bytecode = match compile(template, &env) {
         Ok(bc) => bc,
         Err(err) => {
             eprintln!("error compiling template: {}", err);
@@ -105,7 +105,7 @@ fn bench_zapper_par(c: &mut Criterion) {
 
     // build up a group of 100 (similar) people
     let mut group = vec![];
-    for i in 0..10000 {
+    for i in 0..100 {
         group.push(Person {
             id: 12 + i,
             name: "Bob".to_string(),

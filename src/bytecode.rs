@@ -74,7 +74,7 @@ impl<
     }
 
     /// Renders a template across multiple items in parallel using Rayon with
-    /// convenient internally-managed buffers, which requires a mutable reference to self.
+    /// convenient internally-managed buffers.
     ///
     /// NOTE: This function makes serious trade-offs to enable the _maximum_ throughput.
     /// It is far less efficient, and builds up a single buffer containing all results
@@ -84,7 +84,7 @@ impl<
     /// Only use if total throughput is the sole concern.
     #[cfg(feature = "rayon")]
     pub fn par_render<'b, RunnerItem>(
-        &mut self,
+        &self,
         runner: &[RunnerItem],
         output: &mut Write,
     ) -> Result<(), Vec<::std::io::Error>>
