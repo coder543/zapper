@@ -44,8 +44,7 @@ fn toupper(_data: &Person, _args: &[f64], input: &str, buffer: &mut String) {
 }
 
 fn main() {
-    let template =
-        "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
+    let template = "{{provider}} {{provider_code + 4}} {{id}} {{name | toupper}} {{age | sqrt}} {{weight / 2.2 | round 2}}kg\n";
 
     let env = Provider {
         provider: "john doe".to_string(),

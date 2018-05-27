@@ -6,9 +6,9 @@ use tokenizer::Operator;
 #[allow(unused)]
 pub fn optimize<
     'a,
-    NumEnum: 'a,
-    StrEnum: 'a + Debug + PartialEq,
-    FilterEnum: 'a,
+    NumEnum: 'a + Send + Sync,
+    StrEnum: 'a + Send + Sync + Debug + PartialEq,
+    FilterEnum: 'a + Send + Sync,
     Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
 >(
     ast: Vec<Expr<'a>>,
@@ -43,9 +43,9 @@ pub fn optimize<
 
 pub fn optimize_tree<
     'a,
-    NumEnum: 'a,
-    StrEnum: 'a + Debug + PartialEq,
-    FilterEnum: 'a,
+    NumEnum: 'a + Send + Sync,
+    StrEnum: 'a + Send + Sync + Debug + PartialEq,
+    FilterEnum: 'a + Send + Sync,
     Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
 >(
     tree: Expr<'a>,
@@ -78,9 +78,9 @@ pub fn optimize_tree<
 
 pub fn optimize_numeric<
     'a,
-    NumEnum: 'a,
-    StrEnum: 'a + Debug + PartialEq,
-    FilterEnum: 'a,
+    NumEnum: 'a + Send + Sync,
+    StrEnum: 'a + Send + Sync + Debug + PartialEq,
+    FilterEnum: 'a + Send + Sync,
     Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
 >(
     numeric: Numeric<'a>,

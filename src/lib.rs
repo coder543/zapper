@@ -5,6 +5,9 @@ extern crate zapper_derive;
 #[cfg(feature = "derive")]
 pub use zapper_derive::*;
 
+#[cfg(feature = "rayon")]
+extern crate rayon;
+
 pub mod ast;
 pub mod bytecode;
 pub mod optimizer;
@@ -21,7 +24,13 @@ pub enum FilterInput<StrEnum> {
     Stringified,
 }
 
-pub trait Environment<'a, NumEnum: 'a, StrEnum: 'a + Debug + PartialEq, FilterEnum: 'a> {
+pub trait Environment<
+    'a,
+    NumEnum: 'a + Send + Sync,
+    StrEnum: 'a + Send + Sync + Debug + PartialEq,
+    FilterEnum: 'a + Send + Sync,
+>
+{
     fn num_constant(&self, &str) -> Option<f64>;
     fn str_constant(&'a self, &str) -> Option<Cow<'a, str>>;
 
@@ -33,7 +42,7 @@ pub trait Environment<'a, NumEnum: 'a, StrEnum: 'a + Debug + PartialEq, FilterEn
 }
 
 #[allow(unused)]
-pub trait Runner<NumEnum, StrEnum, FilterEnum> {
+pub trait Runner<NumEnum: Send + Sync, StrEnum: Send + Sync, FilterEnum: Send + Sync> {
     fn num_var(&self, NumEnum) -> f64;
     fn str_var(&self, StrEnum) -> Cow<str>;
 
@@ -46,9 +55,9 @@ pub trait Runner<NumEnum, StrEnum, FilterEnum> {
 
 pub fn compile<
     'a,
-    NumEnum: 'a + Copy + Debug,
-    StrEnum: 'a + Copy + Debug + PartialEq,
-    FilterEnum: 'a + Copy + Debug,
+    NumEnum: 'a + Send + Sync + Copy + Debug,
+    StrEnum: 'a + Send + Sync + Copy + Debug + PartialEq,
+    FilterEnum: 'a + Send + Sync + Copy + Debug,
     Env: Environment<'a, NumEnum, StrEnum, FilterEnum>,
 >(
     source: &'a str,

@@ -67,7 +67,7 @@ fn bench_zapper(c: &mut Criterion) {
 
     // build up a group of 100 (similar) people
     let mut group = vec![];
-    for i in 0..100 {
+    for i in 0..10000 {
         group.push(Person {
             id: 12 + i,
             name: "Bob".to_string(),
@@ -82,6 +82,42 @@ fn bench_zapper(c: &mut Criterion) {
             for person in &group {
                 bytecode.render(person, &mut output).unwrap();
             }
+            output
+        })
+    });
+}
+
+fn bench_zapper_par(c: &mut Criterion) {
+    let template = "{{provider}} {{provider_code}} {{id}} {{name}} {{age}} {{weight}}kg\n";
+    let env = Provider {
+        provider: "apns".to_string(),
+        provider_code: 31,
+    };
+    let mut bytecode = match compile(template, &env) {
+        Ok(bc) => bc,
+        Err(err) => {
+            eprintln!("error compiling template: {}", err);
+            return;
+        }
+    };
+
+    // println!("bytecode: {:#?}", bytecode);
+
+    // build up a group of 100 (similar) people
+    let mut group = vec![];
+    for i in 0..10000 {
+        group.push(Person {
+            id: 12 + i,
+            name: "Bob".to_string(),
+            age: 49,
+            weight: 170.3 + i as f64,
+        });
+    }
+
+    c.bench_function("zapper_par", move |b| {
+        b.iter(|| {
+            let mut output = Vec::new();
+            bytecode.par_render(&group, &mut output).unwrap();
             output
         })
     });
@@ -125,6 +161,7 @@ pub fn benches() {
         .sample_size(200)
         .measurement_time(Duration::from_secs(40));
     bench_zapper(&mut criterion);
+    bench_zapper_par(&mut criterion);
     bench_hbs(&mut criterion);
 }
 

@@ -7,6 +7,11 @@ use std::fmt::Debug;
 use std::io::Write;
 use tokenizer::Operator;
 
+#[cfg(feature = "rayon")]
+use rayon::iter::IntoParallelRefIterator;
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 #[allow(unused)]
 #[derive(Debug)]
 enum Instr<NumEnum, StrEnum, FilterEnum> {
@@ -44,9 +49,9 @@ macro_rules! pop {
 
 impl<
         'a,
-        NumEnum: 'a + Copy + Debug,
-        StrEnum: 'a + Copy + Debug + PartialEq,
-        FilterEnum: 'a + Copy + Debug,
+        NumEnum: 'a + Copy + Debug + Send + Sync,
+        StrEnum: 'a + Copy + Debug + Send + Sync + PartialEq,
+        FilterEnum: 'a + Copy + Debug + Send + Sync,
     > Bytecode<NumEnum, StrEnum, FilterEnum>
 {
     #[allow(unused)]
@@ -68,6 +73,54 @@ impl<
         Ok(ret_val)
     }
 
+    /// Renders a template across multiple items in parallel using Rayon with
+    /// convenient internally-managed buffers, which requires a mutable reference to self.
+    #[cfg(feature = "rayon")]
+    pub fn par_render<'b, RunnerItem>(
+        &mut self,
+        runner: &[RunnerItem],
+        output: &mut Write,
+    ) -> Result<(), Vec<::std::io::Error>>
+    where
+        RunnerItem: 'b + Runner<NumEnum, StrEnum, FilterEnum> + Send + Sync,
+    {
+        thread_local!(static STORE: (Vec<f64>, String) = (Vec::with_capacity(8), String::with_capacity(8)));
+
+        let results: Result<Vec<u8>, Vec<::std::io::Error>> = runner
+            .par_iter()
+            .map(|item| {
+                STORE.with(|(ref mut stack, ref mut buffer)| {
+                    let mut write_buf = Vec::with_capacity(8);
+                    write_buf.clear();
+                    self.render_with(item, &mut write_buf, stack, buffer)
+                        .map(|_| write_buf)
+                        .map_err(|e| vec![e])
+                })
+            })
+            .reduce(
+                || Ok(Vec::with_capacity(32)),
+                |acc, item| match (acc, item) {
+                    (Ok(mut buf), Ok(new_buf)) => {
+                        buf.extend(new_buf);
+                        Ok(buf)
+                    }
+                    (Err(mut errors), Err(new_errors)) => {
+                        errors.extend(new_errors);
+                        Err(errors)
+                    }
+                    (Err(errs), _) | (_, Err(errs)) => Err(errs),
+                },
+            );
+
+        match results {
+            Ok(result) => match output.write_all(&result) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(vec![e]),
+            },
+            Err(errors) => Err(errors),
+        }
+    }
+
     /// Renders a template using convenient internally-managed buffers, which requires a mutable reference to self.
     pub fn render(
         &mut self,
@@ -75,8 +128,7 @@ impl<
         output: &mut Write,
     ) -> Result<(), ::std::io::Error> {
         let mut stack = self.stack.take().unwrap_or_else(|| Vec::with_capacity(8));
-        let mut buffer = self
-            .buffer
+        let mut buffer = self.buffer
             .take()
             .unwrap_or_else(|| String::with_capacity(8));
 
@@ -102,7 +154,9 @@ impl<
                 Instr::PushImm(val) => stack.push(val),
                 Instr::PushNum(id) => stack.push(runner.num_var(id)),
                 Instr::PrintReg => write!(output, "{}", pop!(stack))?,
-                Instr::PrintRaw(start, end) => output.write_all(&self.raw_text[start..end].as_bytes())?,
+                Instr::PrintRaw(start, end) => {
+                    output.write_all(&self.raw_text[start..end].as_bytes())?
+                }
                 Instr::PrintStr(id) => output.write_all(runner.str_var(id).as_bytes())?,
                 Instr::PrintNum(id) => write!(output, "{}", runner.num_var(id))?,
                 Instr::Add => {
@@ -250,8 +304,7 @@ impl<
                 ));
             }
 
-            let args: Result<Vec<f64>, String> = args
-                .into_iter()
+            let args: Result<Vec<f64>, String> = args.into_iter()
                 .map(|x| match x {
                     Literal::Number(val) => Ok(val),
                     Literal::StringLiteral(_) => {
