@@ -1,6 +1,6 @@
 [package]
 name = "zapper"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Josh Leverette <coder543@gmail.com>"]
 license = "MIT"
 description = "lightning fast templating engine"
