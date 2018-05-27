@@ -117,7 +117,7 @@ fn bench_zapper_par(c: &mut Criterion) {
     c.bench_function("zapper_par", move |b| {
         b.iter(|| {
             let mut output = Vec::new();
-            bytecode.par_render(&group, &mut output, 20).unwrap();
+            bytecode.par_render(&group, &mut output, 50).unwrap();
             output
         })
     });
@@ -133,7 +133,7 @@ fn bench_hbs(c: &mut Criterion) {
         .unwrap();
 
     let mut group = vec![];
-    for i in 0..100 {
+    for i in 0..1000 {
         group.push(Person {
             id: 12 + i,
             name: "Bob".to_string(),

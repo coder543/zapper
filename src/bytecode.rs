@@ -80,7 +80,7 @@ impl<
     /// It is less efficient, but given the right par_chunk_size and right number
     /// of cores, it can increase total throughput.
     ///
-    /// A recommended starting point for par_chunk_size is 20.
+    /// A recommended starting point for par_chunk_size is 50.
     #[cfg(feature = "rayon")]
     pub fn par_render<'b, RunnerItem, Writer>(
         &self,
@@ -100,12 +100,14 @@ impl<
             .par_chunks(par_chunk_size)
             .map(|items| {
                 STORE.with(|(ref mut stack, ref mut buffer)| {
-                    let mut write_buf = Vec::with_capacity(8);
+                    let mut write_buf = Vec::with_capacity(8 * par_chunk_size);
+
                     for item in items {
                         self.render_with(item, &mut write_buf, stack, buffer)?;
                     }
                     output.lock().unwrap().write_all(&write_buf)?;
-                    return Ok(());
+
+                    Ok(())
                 })
             })
             .collect()

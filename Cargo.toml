@@ -1,6 +1,6 @@
 [package]
 name = "zapper"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Josh Leverette <coder543@gmail.com>"]
 license = "MIT"
 description = "lightning fast templating engine"
@@ -14,8 +14,6 @@ derive = ["zapper_derive"]
 zapper_derive = { version = "0.1.0", optional = true }
 rayon = { version = "1.0.1", optional = true }
 
-# uncomment if doing benchmarks
-# otherwise, it just slows down compilation of examples
 [dev-dependencies]
 criterion = "0.2.3"
 handlebars = "0.32.0"
