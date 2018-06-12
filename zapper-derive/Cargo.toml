@@ -1,7 +1,7 @@
 [package]
 authors = ["Josh Leverette <coder543@gmail.com>"]
 name = "zapper_derive"
-version = "0.1.0"
+version = "0.9.0"
 license = "MIT"
 description = "provides custom derive for the zapper crate"
 
