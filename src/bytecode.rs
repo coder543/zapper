@@ -3,8 +3,10 @@
 use super::{Environment, FilterInput, Runner};
 use ast::*;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::Write;
+use std::ops::DerefMut;
 use tokenizer::Operator;
 
 #[cfg(feature = "rayon")]
@@ -92,14 +94,17 @@ impl<
         RunnerItem: 'b + Runner<NumEnum, StrEnum, FilterEnum> + Send + Sync,
         Writer: Write + Send,
     {
-        thread_local!(static STORE: (Vec<f64>, String) = (Vec::with_capacity(8), String::with_capacity(8)));
+        thread_local!(static STORE: RefCell<(Vec<f64>, String)> = RefCell::new((Vec::with_capacity(8), String::with_capacity(8))));
 
         let output = ::std::sync::Mutex::new(output);
 
         runner
             .par_chunks(par_chunk_size)
             .map(|items| {
-                STORE.with(|(ref mut stack, ref mut buffer)| {
+                STORE.with(|store| {
+                    let mut store = store.borrow_mut();
+                    let store = store.deref_mut();
+                    let (stack, buffer) = (&mut store.0, &mut store.1);
                     let mut write_buf = Vec::with_capacity(8 * par_chunk_size);
 
                     for item in items {
@@ -120,7 +125,8 @@ impl<
         output: &mut Write,
     ) -> Result<(), ::std::io::Error> {
         let mut stack = self.stack.take().unwrap_or_else(|| Vec::with_capacity(8));
-        let mut buffer = self.buffer
+        let mut buffer = self
+            .buffer
             .take()
             .unwrap_or_else(|| String::with_capacity(8));
 
@@ -296,7 +302,8 @@ impl<
                 ));
             }
 
-            let args: Result<Vec<f64>, String> = args.into_iter()
+            let args: Result<Vec<f64>, String> = args
+                .into_iter()
                 .map(|x| match x {
                     Literal::Number(val) => Ok(val),
                     Literal::StringLiteral(_) => {
