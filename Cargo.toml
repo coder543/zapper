@@ -5,6 +5,8 @@ authors = ["Josh Leverette <coder543@gmail.com>"]
 license = "MIT"
 description = "lightning fast templating engine"
 repository = "https://github.com/coder543/zapper"
+keywords = ["template",]
+categories = ["template-engine"]
 
 [features]
 default = ["derive", "rayon"]
